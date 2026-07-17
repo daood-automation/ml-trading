@@ -688,16 +688,55 @@ async function viewTeam(M){
     <button class="btn" id="addu">Add team member</button></div>
     <div class="card"><div id="ulist">Loading…</div></div>`;
   $("addu").onclick=()=>userForm();
+  let USERS=[];
   async function load(){
     try{ const {users}=await api("/api/app/users");
-      const staff=users.filter(u=>u.role!=="reseller");
-      if(!staff.length){ $("ulist").innerHTML=`<div class="empty">No team members yet.</div>`; return; }
+      USERS=users.filter(u=>u.role!=="reseller");
+      if(!USERS.length){ $("ulist").innerHTML=`<div class="empty">No team members yet.</div>`; return; }
+      const statusPill=(u)=> u.status!=="active"
+        ? '<span class="pill s-red">'+SVG(ICONS.x)+'Inactive</span>'
+        : (u.forcePasswordSetup?'<span class="pill s-amber">'+SVG(ICONS.clock)+'Pending setup</span>':'<span class="pill s-green">'+SVG(ICONS.check)+'Active</span>');
       $("ulist").innerHTML=`<table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Last login</th></tr></thead><tbody>
-        ${staff.map(u=>`<tr><td>${esc(u.name)}</td><td class="faint">${esc(u.email)}</td>
-          <td>${esc(ROLE_LABEL[u.role]||u.role)}</td>
-          <td>${u.forcePasswordSetup?'<span class="pill s-amber">'+SVG(ICONS.clock)+'Pending setup</span>':'<span class="pill s-green">'+SVG(ICONS.check)+'Active</span>'}</td>
+        ${USERS.map(u=>`<tr class="row" data-id="${u.id}"><td>${esc(u.name)}</td><td class="faint">${esc(u.email)}</td>
+          <td>${esc(ROLE_LABEL[u.role]||u.role)}</td><td>${statusPill(u)}</td>
           <td class="faint">${u.lastLoginAt?new Date(u.lastLoginAt).toLocaleDateString():"—"}</td></tr>`).join("")}</tbody></table>`;
+      $("ulist").querySelectorAll("tr.row").forEach(r=>r.onclick=()=>editUser(USERS.find(u=>u.id===r.dataset.id)));
     }catch(e){ $("ulist").innerHTML=`<div class="empty">Could not load team.</div>`; }
+  }
+  function editUser(u){
+    const canEditRole=STATE.user.role==="owner";
+    M.innerHTML=`<div class="head"><div><div class="eyebrow">Team member</div><h1>${esc(u.name)}</h1></div>
+      <button class="btn ghost" id="back">← Back</button></div>
+      <div class="grid" style="grid-template-columns:1fr 1fr;align-items:start">
+        <div class="card"><h3 style="margin-bottom:14px">Details</h3>
+          <div class="field"><label>Full name</label><input id="name" value="${esc(u.name)}"/></div>
+          <div class="field"><label>Email</label><input value="${esc(u.email)}" disabled/></div>
+          <div class="field"><label>Role</label><select id="role" ${canEditRole?"":"disabled"}>${ROLES.map(r=>`<option value="${r[0]}" ${u.role===r[0]?"selected":""}>${r[1]}</option>`).join("")}${!ROLES.some(r=>r[0]===u.role)?`<option value="${u.role}" selected>${ROLE_LABEL[u.role]||u.role}</option>`:""}</select></div>
+          <div class="field"><label>Status</label><select id="status">
+            <option value="active" ${u.status==="active"?"selected":""}>Active</option>
+            <option value="inactive" ${u.status==="inactive"?"selected":""}>Inactive</option></select></div>
+          <button class="btn" id="save" style="width:100%">Save changes</button>
+          <div class="err" id="eerr"></div></div>
+        <div class="card"><h3 style="margin-bottom:14px">Security</h3>
+          <p class="muted" style="margin-top:0">Reset generates a new one-time setup link and forces them to choose a new password.</p>
+          <button class="btn ghost" id="reset" style="width:100%;margin-bottom:10px">Reset password</button>
+          <button class="btn ghost" id="revoke" style="width:100%">Sign out all sessions</button>
+          <div id="sok"></div></div>
+      </div>`;
+    $("back").onclick=()=>viewTeam(M);
+    $("save").onclick=async()=>{
+      $("eerr").textContent="";
+      const body={name:$("name").value.trim(),status:$("status").value};
+      if(canEditRole) body.role=$("role").value;
+      try{ await api("/api/app/users/"+u.id,{method:"POST",body:JSON.stringify(body)}); toast("Saved"); viewTeam(M); }
+      catch(e){ $("eerr").textContent=e.message==="cannot_remove_last_owner"?"Can't deactivate/demote the only owner.":e.message==="cannot_deactivate_self"?"You can't deactivate your own account.":"Could not save: "+e.message; }
+    };
+    $("reset").onclick=async()=>{
+      try{ const r=await api("/api/app/users/"+u.id+"/reset-password",{method:"POST"});
+        $("sok").innerHTML=`<div class="ok" style="margin-top:12px">Send them this reset link:</div><div class="linkbox" style="margin-top:8px">${esc(r.setupLink)}</div>`;
+      }catch(e){ toast("Could not reset: "+e.message,true); }
+    };
+    $("revoke").onclick=async()=>{ try{ await api("/api/app/users/"+u.id+"/revoke-sessions",{method:"POST"}); toast("All sessions signed out"); }catch(e){ toast("Failed",true); } };
   }
   function userForm(){
     M.innerHTML=`<div class="head"><div><div class="eyebrow">Accounts</div><h1>Add team member</h1></div>
@@ -729,12 +768,48 @@ async function viewResellers(M){
     <button class="btn" id="addr">Add reseller</button></div>
     <div class="card"><div id="rlist">Loading…</div></div>`;
   $("addr").onclick=()=>resellerForm();
+  let RS=[];
   async function load(){
     try{ const {resellers}=await api("/api/app/resellers");
-      if(!resellers.length){ $("rlist").innerHTML=`<div class="empty">No resellers yet.</div>`; return; }
+      RS=resellers;
+      if(!RS.length){ $("rlist").innerHTML=`<div class="empty">No resellers yet.</div>`; return; }
       $("rlist").innerHTML=`<table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Status</th></tr></thead><tbody>
-        ${resellers.map(r=>`<tr><td>${esc(r.name)}</td><td class="faint">${esc(r.email)}</td><td class="faint">${esc(r.phone||"—")}</td><td>${esc(r.status)}</td></tr>`).join("")}</tbody></table>`;
+        ${RS.map(r=>`<tr class="row" data-id="${r.id}"><td>${esc(r.name)}</td><td class="faint">${esc(r.email)}</td><td class="faint">${esc(r.phone||"—")}</td>
+          <td>${r.status==="active"?'<span class="pill s-green">'+SVG(ICONS.check)+'Active</span>':'<span class="pill s-red">'+SVG(ICONS.x)+esc(r.status)+'</span>'}</td></tr>`).join("")}</tbody></table>`;
+      $("rlist").querySelectorAll("tr.row").forEach(row=>row.onclick=()=>editReseller(RS.find(x=>x.id===row.dataset.id)));
     }catch(e){ $("rlist").innerHTML=`<div class="empty">Could not load resellers.</div>`; }
+  }
+  function editReseller(r){
+    M.innerHTML=`<div class="head"><div><div class="eyebrow">Reseller</div><h1>${esc(r.name)}</h1></div>
+      <button class="btn ghost" id="back">← Back</button></div>
+      <div class="grid" style="grid-template-columns:1fr 1fr;align-items:start">
+        <div class="card"><h3 style="margin-bottom:14px">Details</h3>
+          <div class="field"><label>Business name</label><input id="name" value="${esc(r.name)}"/></div>
+          <div class="field"><label>Contact email</label><input id="email" value="${esc(r.email)}"/></div>
+          <div class="field"><label>Phone</label><input id="phone" value="${esc(r.phone||"")}"/></div>
+          <div class="field"><label>Address</label><textarea id="addr" rows="2">${esc(r.address||"")}</textarea></div>
+          <div class="field"><label>Status</label><select id="status">
+            <option value="active" ${r.status==="active"?"selected":""}>Active</option>
+            <option value="inactive" ${r.status==="inactive"?"selected":""}>Inactive</option></select></div>
+          <button class="btn" id="save" style="width:100%">Save changes</button>
+          <div class="err" id="rerr"></div></div>
+        <div class="card"><h3 style="margin-bottom:14px">Login</h3>
+          <p class="muted" style="margin-top:0">Regenerate a one-time setup link if they lost theirs or need a password reset.</p>
+          <button class="btn ghost" id="reset" style="width:100%">Regenerate setup link</button>
+          <div id="rok"></div></div>
+      </div>`;
+    $("back").onclick=()=>viewResellers(M);
+    $("save").onclick=async()=>{
+      $("rerr").textContent="";
+      const body={name:$("name").value.trim(),email:$("email").value.trim(),phone:$("phone").value.trim(),address:$("addr").value.trim(),status:$("status").value};
+      try{ await api("/api/app/resellers/"+r.id,{method:"POST",body:JSON.stringify(body)}); toast("Saved"); viewResellers(M); }
+      catch(e){ $("rerr").textContent="Could not save: "+e.message; }
+    };
+    $("reset").onclick=async()=>{
+      try{ const x=await api("/api/app/resellers/"+r.id+"/reset-login",{method:"POST"});
+        $("rok").innerHTML=`<div class="ok" style="margin-top:12px">New setup link:</div><div class="linkbox" style="margin-top:8px">${esc(x.setupLink)}</div>`;
+      }catch(e){ toast(e.message==="no_login_for_reseller"?"This reseller has no login account.":"Failed",true); }
+    };
   }
   function resellerForm(){
     M.innerHTML=`<div class="head"><div><div class="eyebrow">Accounts</div><h1>Add reseller</h1></div>

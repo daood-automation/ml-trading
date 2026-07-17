@@ -1080,6 +1080,142 @@ app.post("/api/app/products/import-catalog", requireRole("owner"), async (c) => 
   return c.json({ ok: true, added: toAdd.length, skipped: CATALOG.length - toAdd.length });
 });
 
+/* ============================================================
+ * USER MANAGEMENT  (edit / deactivate / reset / revoke)
+ * ========================================================== */
+
+app.post("/api/app/users/:id", requireRole("owner"), async (c) => {
+  const db = getDb(c.env.DATABASE_URL);
+  const actor = c.get("user");
+  const id = c.req.param("id");
+  const body = await c.req.json<{
+    name?: string;
+    role?: (typeof schema.users.$inferSelect)["role"];
+    status?: (typeof schema.users.$inferSelect)["status"];
+  }>();
+
+  const [target] = await db.select().from(schema.users).where(eq(schema.users.id, id)).limit(1);
+  if (!target) return c.json({ error: "not_found" }, 404);
+
+  const set: any = { updatedAt: new Date() };
+  if (body.name !== undefined) set.name = body.name.trim();
+  if (body.role !== undefined) set.role = body.role;
+  if (body.status !== undefined) set.status = body.status;
+
+  // never allow removing/demoting/deactivating the last active owner
+  const removingOwner =
+    target.role === "owner" &&
+    ((set.role && set.role !== "owner") || (set.status && set.status !== "active"));
+  if (removingOwner) {
+    const owners = await db
+      .select({ id: schema.users.id })
+      .from(schema.users)
+      .where(and(eq(schema.users.role, "owner"), eq(schema.users.status, "active")));
+    if (owners.length <= 1) return c.json({ error: "cannot_remove_last_owner" }, 422);
+  }
+  if (actor.id === id && set.status && set.status !== "active") {
+    return c.json({ error: "cannot_deactivate_self" }, 422);
+  }
+
+  await db.update(schema.users).set(set).where(eq(schema.users.id, id));
+  await db.insert(schema.auditLog).values({
+    userId: actor.id, userEmail: actor.email, userRole: actor.role,
+    action: "user_updated", notes: id,
+    oldValue: `${target.role}/${target.status}`,
+    newValue: `${set.role ?? target.role}/${set.status ?? target.status}`,
+  });
+  return c.json({ ok: true });
+});
+
+app.post(
+  "/api/app/users/:id/reset-password",
+  requireRole("owner", "finance_manager", "shipping_manager"),
+  async (c) => {
+    const db = getDb(c.env.DATABASE_URL);
+    const actor = c.get("user");
+    const id = c.req.param("id");
+    const [target] = await db.select().from(schema.users).where(eq(schema.users.id, id)).limit(1);
+    if (!target) return c.json({ error: "not_found" }, 404);
+    if (target.role === "owner" && actor.role !== "owner")
+      return c.json({ error: "only_owner_can_reset_owner" }, 403);
+
+    const raw = generateToken();
+    const tokenHash = await hashToken(raw);
+    await db.insert(schema.passwordTokens).values({
+      userId: id, tokenHash, purpose: "reset",
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    });
+    await db.update(schema.users).set({ forcePasswordSetup: true }).where(eq(schema.users.id, id));
+    await db.insert(schema.auditLog).values({
+      userId: actor.id, userEmail: actor.email, userRole: actor.role,
+      action: "user_password_reset", notes: id,
+    });
+    return c.json({ ok: true, setupLink: `${reqOrigin(c)}/?setup=${raw}` });
+  }
+);
+
+app.post(
+  "/api/app/users/:id/revoke-sessions",
+  requireRole("owner", "finance_manager", "shipping_manager"),
+  async (c) => {
+    const db = getDb(c.env.DATABASE_URL);
+    const actor = c.get("user");
+    const id = c.req.param("id");
+    await db.update(schema.sessions).set({ revoked: true }).where(eq(schema.sessions.userId, id));
+    await db.insert(schema.auditLog).values({
+      userId: actor.id, userEmail: actor.email, userRole: actor.role,
+      action: "sessions_revoked", notes: id,
+    });
+    return c.json({ ok: true });
+  }
+);
+
+/* ============================================================
+ * RESELLER MANAGEMENT  (edit / status / regenerate login link)
+ * ========================================================== */
+
+app.post("/api/app/resellers/:id", requireRole("owner", "finance_manager"), async (c) => {
+  const db = getDb(c.env.DATABASE_URL);
+  const id = c.req.param("id");
+  const body = await c.req.json<{
+    name?: string; email?: string; phone?: string; address?: string;
+    status?: (typeof schema.resellers.$inferSelect)["status"];
+  }>();
+  const [r] = await db.select().from(schema.resellers).where(eq(schema.resellers.id, id)).limit(1);
+  if (!r) return c.json({ error: "not_found" }, 404);
+  const set: any = {};
+  if (body.name !== undefined) set.name = body.name.trim();
+  if (body.email !== undefined) set.email = body.email.trim().toLowerCase();
+  if (body.phone !== undefined) set.phone = body.phone.trim() || null;
+  if (body.address !== undefined) set.address = body.address.trim() || null;
+  if (body.status !== undefined) set.status = body.status;
+  await db.update(schema.resellers).set(set).where(eq(schema.resellers.id, id));
+  // keep the linked login's status in step with the reseller account
+  if (set.status) {
+    await db.update(schema.users).set({ status: set.status }).where(eq(schema.users.resellerId, id));
+  }
+  return c.json({ ok: true });
+});
+
+app.post(
+  "/api/app/resellers/:id/reset-login",
+  requireRole("owner", "finance_manager"),
+  async (c) => {
+    const db = getDb(c.env.DATABASE_URL);
+    const id = c.req.param("id");
+    const [u] = await db.select().from(schema.users).where(eq(schema.users.resellerId, id)).limit(1);
+    if (!u) return c.json({ error: "no_login_for_reseller" }, 404);
+    const raw = generateToken();
+    const tokenHash = await hashToken(raw);
+    await db.insert(schema.passwordTokens).values({
+      userId: u.id, tokenHash, purpose: "reset",
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    });
+    await db.update(schema.users).set({ forcePasswordSetup: true }).where(eq(schema.users.id, u.id));
+    return c.json({ ok: true, setupLink: `${reqOrigin(c)}/?setup=${raw}` });
+  }
+);
+
 /* ---------- health ---------- */
 
 app.get("/api/health", async (c) => {
