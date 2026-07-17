@@ -321,6 +321,7 @@ function navItems(){
   if(STATE.user.role==="reseller") items.push({k:"new",label:"New order"});
   if(isShipping()) items.push({k:"queue",label:"Shipping queue"});
   if(canManage()) items.push({k:"products",label:"Products"});
+  if(canManage()) items.push({k:"team",label:"Team"});
   if(["owner","finance_manager"].includes(STATE.user.role)) items.push({k:"resellers",label:"Resellers"});
   return items;
 }
@@ -344,6 +345,7 @@ function renderApp(view){
   else if(view==="new") viewNewOrder(M);
   else if(view==="queue") viewQueue(M);
   else if(view==="products") viewProducts(M);
+  else if(view==="team") viewTeam(M);
   else if(view==="resellers") viewResellers(M);
 }
 
@@ -626,6 +628,50 @@ async function viewProducts(M){
         price:$("price").value===""?undefined:$("price").value,status:$("status").value};
       try{ await api("/api/app/products",{method:"POST",body:JSON.stringify(body)}); toast("Saved"); viewProducts(M); }
       catch(e){ $("perr").textContent="Could not save: "+e.message; }
+    };
+  }
+  load();
+}
+
+/* ---------- team / users ---------- */
+async function viewTeam(M){
+  const ROLES=[["finance_manager","Finance Manager"],["finance_team","Finance"],
+    ["shipping_manager","Shipping Manager"],["shipping_team","Shipping"]];
+  if(STATE.user.role==="owner") ROLES.push(["owner","Owner"]);
+  M.innerHTML=`<div class="head"><div><div class="eyebrow">Accounts</div><h1>Team</h1></div>
+    <button class="btn" id="addu">Add team member</button></div>
+    <div class="card"><div id="ulist">Loading…</div></div>`;
+  $("addu").onclick=()=>userForm();
+  async function load(){
+    try{ const {users}=await api("/api/app/users");
+      const staff=users.filter(u=>u.role!=="reseller");
+      if(!staff.length){ $("ulist").innerHTML=`<div class="empty">No team members yet.</div>`; return; }
+      $("ulist").innerHTML=`<table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Last login</th></tr></thead><tbody>
+        ${staff.map(u=>`<tr><td>${esc(u.name)}</td><td class="faint">${esc(u.email)}</td>
+          <td>${esc(ROLE_LABEL[u.role]||u.role)}</td>
+          <td>${u.forcePasswordSetup?'<span class="pill s-amber">'+SVG(ICONS.clock)+'Pending setup</span>':'<span class="pill s-green">'+SVG(ICONS.check)+'Active</span>'}</td>
+          <td class="faint">${u.lastLoginAt?new Date(u.lastLoginAt).toLocaleDateString():"—"}</td></tr>`).join("")}</tbody></table>`;
+    }catch(e){ $("ulist").innerHTML=`<div class="empty">Could not load team.</div>`; }
+  }
+  function userForm(){
+    M.innerHTML=`<div class="head"><div><div class="eyebrow">Accounts</div><h1>Add team member</h1></div>
+      <button class="btn ghost" id="back">← Back</button></div>
+      <div class="card" style="max-width:480px">
+        <div class="field"><label>Full name</label><input id="name"/></div>
+        <div class="field"><label>Email</label><input id="email" type="email"/></div>
+        <div class="field"><label>Role</label><select id="role">${ROLES.map(r=>`<option value="${r[0]}">${r[1]}</option>`).join("")}</select></div>
+        <button class="btn" id="save" style="width:100%">Create & generate setup link</button>
+        <div class="err" id="uerr"></div><div id="uok"></div></div>`;
+    $("back").onclick=()=>viewTeam(M);
+    $("save").onclick=async()=>{
+      $("uerr").textContent="";
+      const body={name:$("name").value.trim(),email:$("email").value.trim(),role:$("role").value};
+      if(!body.name||!body.email){ $("uerr").textContent="Name and email are required."; return; }
+      try{ const r=await api("/api/app/users",{method:"POST",body:JSON.stringify(body)});
+        $("uok").innerHTML=`<div class="ok" style="margin-top:12px">Account created. Send them this one-time setup link (open it in another browser or incognito to test that role):</div>
+          <div class="linkbox" style="margin-top:8px">${esc(r.setupLink)}</div>`;
+        toast("Team member created");
+      }catch(e){ $("uerr").textContent="Could not create: "+(e.message==="email_already_exists"?"that email already exists":e.message); }
     };
   }
   load();

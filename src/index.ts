@@ -296,6 +296,31 @@ app.post("/api/auth/set-password", async (c) => {
 });
 
 /* ============================================================
+ * LIST USERS  (staff directory)
+ * ========================================================== */
+
+app.get(
+  "/api/app/users",
+  requireRole("owner", "finance_manager", "shipping_manager"),
+  async (c) => {
+    const db = getDb(c.env.DATABASE_URL);
+    const rows = await db
+      .select({
+        id: schema.users.id,
+        email: schema.users.email,
+        name: schema.users.name,
+        role: schema.users.role,
+        status: schema.users.status,
+        forcePasswordSetup: schema.users.forcePasswordSetup,
+        lastLoginAt: schema.users.lastLoginAt,
+      })
+      .from(schema.users)
+      .orderBy(desc(schema.users.createdAt));
+    return c.json({ users: rows });
+  }
+);
+
+/* ============================================================
  * CREATE USER  (owner / managers add staff or resellers)
  * Creates the login + a hashed setup token. Until Resend is wired,
  * the setup link is returned in the response so you can hand it over;
