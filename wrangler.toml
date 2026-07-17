@@ -24,3 +24,8 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 # non-secret config can go here
 APP_NAME = "ML Trading International"
+
+# --- Static frontend served by the same Worker ---
+# Files in ./public are served for non-/api paths; /api/* hits the Worker.
+[assets]
+directory = "./public"

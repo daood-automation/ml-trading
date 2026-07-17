@@ -352,7 +352,7 @@ app.post(
       expiresAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
     });
 
-    const setupLink = `${c.env.APP_BASE_URL}/set-password?token=${raw}`;
+    const setupLink = `${c.env.APP_BASE_URL}/?setup=${raw}`;
     return c.json({
       ok: true,
       user: { id: u.id, email: u.email, role: u.role },
@@ -925,7 +925,7 @@ app.post(
       notes: reseller.id,
     });
 
-    const setupLink = `${c.env.APP_BASE_URL}/set-password?token=${raw}`;
+    const setupLink = `${c.env.APP_BASE_URL}/?setup=${raw}`;
     return c.json({
       ok: true,
       reseller,

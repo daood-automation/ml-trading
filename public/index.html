@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ML Trading — Operations</title>
+<style>
+  :root{
+    --bg:#0e141d; --surface:#161f2b; --surface2:#1d2836; --border:#2a3949;
+    --text:#e7eef7; --muted:#8496ab; --faint:#5d6f84;
+    --accent:#f0a338; --accent-ink:#1a1206;
+    --grey:#64748b; --amber:#e0a13a; --blue:#4b8ef0; --green:#3fbf7f;
+    --red:#e8615a; --cyan:#37c2bd; --indigo:#7c83f0; --violet:#a366e6;
+    --radius:10px;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  a{color:var(--accent);text-decoration:none}
+  button{font-family:inherit;font-size:14px;cursor:pointer}
+  input,select,textarea{font-family:inherit;font-size:14px}
+  h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.01em}
+  .mono{font-family:var(--mono)}
+  .muted{color:var(--muted)}
+  .faint{color:var(--faint)}
+
+  /* layout shell */
+  .shell{display:grid;grid-template-columns:230px 1fr;min-height:100vh}
+  .side{background:var(--surface);border-right:1px solid var(--border);
+    padding:20px 14px;display:flex;flex-direction:column;gap:4px}
+  .brand{display:flex;align-items:baseline;gap:8px;padding:6px 10px 18px}
+  .brand b{font-size:15px;letter-spacing:.02em}
+  .brand span{font-size:10px;text-transform:uppercase;letter-spacing:.18em;color:var(--faint)}
+  .nav{display:flex;flex-direction:column;gap:2px}
+  .nav button{background:none;border:none;color:var(--muted);text-align:left;
+    padding:9px 10px;border-radius:8px;display:flex;align-items:center;gap:9px}
+  .nav button:hover{background:var(--surface2);color:var(--text)}
+  .nav button.on{background:var(--surface2);color:var(--text);
+    box-shadow:inset 2px 0 0 var(--accent)}
+  .side .foot{margin-top:auto;padding:10px;border-top:1px solid var(--border);
+    font-size:12px;color:var(--faint)}
+  .side .foot b{color:var(--muted);font-weight:600}
+  .main{padding:26px 30px;overflow:auto;max-height:100vh}
+  .head{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+  .eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:.16em;color:var(--faint);margin-bottom:4px}
+
+  /* buttons */
+  .btn{background:var(--accent);color:var(--accent-ink);border:none;font-weight:650;
+    padding:9px 15px;border-radius:8px}
+  .btn:hover{filter:brightness(1.06)}
+  .btn.ghost{background:none;border:1px solid var(--border);color:var(--text);font-weight:550}
+  .btn.ghost:hover{border-color:var(--faint)}
+  .btn.sm{padding:6px 11px;font-size:13px}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+
+  /* cards + tables */
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px}
+  .grid{display:grid;gap:14px}
+  table{width:100%;border-collapse:collapse}
+  th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.08em;
+    color:var(--faint);font-weight:600;padding:8px 12px;border-bottom:1px solid var(--border)}
+  td{padding:11px 12px;border-bottom:1px solid var(--border)}
+  tr.row{cursor:pointer}
+  tr.row:hover td{background:var(--surface2)}
+  .field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+  .field label{font-size:12px;color:var(--muted);font-weight:550}
+  .field input,.field select,.field textarea{background:var(--bg);border:1px solid var(--border);
+    color:var(--text);padding:9px 11px;border-radius:8px;width:100%}
+  .field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--accent)}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+
+  /* status pills */
+  .pill{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:20px;
+    font-size:12px;font-weight:600;white-space:nowrap;border:1px solid transparent}
+  .pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.9}
+  .s-grey{color:#a4b2c2;background:rgba(100,116,139,.14);border-color:rgba(100,116,139,.3)}
+  .s-amber{color:#f0b95e;background:rgba(224,161,58,.13);border-color:rgba(224,161,58,.3)}
+  .s-blue{color:#78adf6;background:rgba(75,142,240,.13);border-color:rgba(75,142,240,.3)}
+  .s-green{color:#5fd39a;background:rgba(63,191,127,.13);border-color:rgba(63,191,127,.3)}
+  .s-red{color:#f18a84;background:rgba(232,97,90,.13);border-color:rgba(232,97,90,.3)}
+  .s-cyan{color:#5fd6d1;background:rgba(55,194,189,.13);border-color:rgba(55,194,189,.3)}
+  .s-indigo{color:#9aa0f5;background:rgba(124,131,240,.13);border-color:rgba(124,131,240,.3)}
+  .s-violet{color:#c39af0;background:rgba(163,102,230,.13);border-color:rgba(163,102,230,.3)}
+
+  /* state track */
+  .track{display:flex;gap:0;margin:14px 0 6px}
+  .track .step{flex:1;text-align:center;position:relative;padding-top:22px;font-size:11px;color:var(--faint)}
+  .track .step::before{content:"";position:absolute;top:6px;left:50%;width:11px;height:11px;
+    border-radius:50%;background:var(--border);transform:translateX(-50%);z-index:2}
+  .track .step::after{content:"";position:absolute;top:11px;left:-50%;width:100%;height:2px;background:var(--border);z-index:1}
+  .track .step:first-child::after{display:none}
+  .track .step.done{color:var(--text)}
+  .track .step.done::before{background:var(--green)}
+  .track .step.done::after{background:var(--green)}
+  .track .step.cur::before{background:var(--accent);box-shadow:0 0 0 4px rgba(240,163,56,.18)}
+  .track .step.cur{color:var(--accent)}
+
+  /* login */
+  .auth{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+  .auth .box{width:360px}
+  .auth .logo{margin-bottom:22px}
+  .auth .logo b{font-size:19px}
+  .err{color:var(--red);font-size:13px;margin-top:8px;min-height:18px}
+  .ok{color:var(--green);font-size:13px;margin-top:8px}
+  .toast{position:fixed;bottom:22px;right:22px;background:var(--surface2);
+    border:1px solid var(--border);padding:12px 16px;border-radius:8px;
+    box-shadow:0 8px 24px rgba(0,0,0,.4);opacity:0;transform:translateY(8px);
+    transition:.2s;max-width:320px}
+  .toast.show{opacity:1;transform:none}
+  .toast.bad{border-color:var(--red)}
+  .empty{text-align:center;padding:50px 20px;color:var(--faint)}
+  .linkbox{background:var(--bg);border:1px dashed var(--border);border-radius:8px;
+    padding:10px;font-family:var(--mono);font-size:12px;word-break:break-all;color:var(--cyan)}
+  @media(max-width:720px){.shell{grid-template-columns:1fr}.side{display:none}.main{padding:18px}.row2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast" class="toast"></div>
+
+<script>
+const $ = (id)=>document.getElementById(id);
+const app = $("app");
+let STATE = { user:null };
+
+/* ---------- helpers ---------- */
+function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m])); }
+function money(n){ return "£"+Number(n||0).toFixed(2); }
+function toast(msg,bad){ const t=$("toast"); t.textContent=msg; t.className="toast show"+(bad?" bad":""); setTimeout(()=>t.className="toast",2600); }
+async function api(path,opts={}){
+  const res = await fetch(path,{credentials:"include",headers:{"Content-Type":"application/json"},...opts});
+  let data=null; try{ data=await res.json(); }catch(e){}
+  if(!res.ok){ const err=new Error((data&&data.error)||("http_"+res.status)); err.data=data; err.status=res.status; throw err; }
+  return data;
+}
+
+/* ---------- status label + colour maps ---------- */
+const PAY_LABEL={awaiting_payment:"Awaiting payment",review_pending:"Review pending",cash_pending:"Cash pending",partial_verified:"Partial verified",full_verified:"Paid in full",not_found:"Not found",needs_clarification:"Needs clarification",cancelled:"Cancelled"};
+const PAY_COLOR={awaiting_payment:"s-grey",review_pending:"s-amber",cash_pending:"s-amber",partial_verified:"s-blue",full_verified:"s-green",not_found:"s-red",needs_clarification:"s-amber",cancelled:"s-red"};
+const FUL_LABEL={not_released:"Not released",ready_to_pack:"Ready to pack",packed:"Packed",dispatched:"Dispatched",delivered:"Delivered",collected:"Collected",issue_hold:"On hold",cancelled:"Cancelled"};
+const FUL_COLOR={not_released:"s-grey",ready_to_pack:"s-cyan",packed:"s-indigo",dispatched:"s-violet",delivered:"s-green",collected:"s-green",issue_hold:"s-red",cancelled:"s-red"};
+function pill(map,cmap,v){ return `<span class="pill ${cmap[v]||"s-grey"}">${esc(map[v]||v)}</span>`; }
+
+const ROLE_LABEL={owner:"Owner",finance_manager:"Finance Manager",finance_team:"Finance",shipping_manager:"Shipping Manager",shipping_team:"Shipping",reseller:"Reseller"};
+const isStaff=()=>STATE.user&&STATE.user.role!=="reseller";
+const isFinance=()=>["owner","finance_manager","finance_team"].includes(STATE.user?.role);
+const isShipping=()=>["owner","shipping_manager","shipping_team"].includes(STATE.user?.role);
+const canManage=()=>["owner","finance_manager","shipping_manager"].includes(STATE.user?.role);
+
+/* ---------- boot ---------- */
+async function boot(){
+  const params=new URLSearchParams(location.search);
+  const setup=params.get("setup");
+  if(setup){ return renderSetup(setup); }
+  try{ const me=await api("/api/app/me"); STATE.user=me.user; renderApp("orders"); }
+  catch(e){ renderLogin(); }
+}
+
+/* ---------- login ---------- */
+function renderLogin(){
+  app.innerHTML=`<div class="auth"><div class="box">
+    <div class="logo"><div class="eyebrow">ML Trading International</div><b>Operations Console</b></div>
+    <div class="card">
+      <div class="field"><label>Email</label><input id="email" type="email" autocomplete="username"/></div>
+      <div class="field"><label>Password</label><input id="pw" type="password" autocomplete="current-password"/></div>
+      <button class="btn" style="width:100%" id="go">Sign in</button>
+      <div class="err" id="err"></div>
+    </div></div></div>`;
+  const go=async()=>{
+    $("err").textContent="";
+    try{ const r=await api("/api/auth/login",{method:"POST",body:JSON.stringify({email:$("email").value.trim(),password:$("pw").value})});
+      STATE.user=r.user; renderApp("orders"); }
+    catch(e){ $("err").textContent=loginErr(e.message); }
+  };
+  $("go").onclick=go;
+  $("pw").addEventListener("keydown",e=>{if(e.key==="Enter")go();});
+}
+function loginErr(m){ return {invalid_credentials:"Email or password is incorrect.",account_locked:"Too many attempts. Try again in 15 minutes.",account_inactive:"This account is inactive.",password_setup_required:"You need to set your password first — use your setup link."}[m]||"Could not sign in."; }
+
+/* ---------- set password ---------- */
+function renderSetup(token){
+  app.innerHTML=`<div class="auth"><div class="box">
+    <div class="logo"><div class="eyebrow">ML Trading International</div><b>Set your password</b></div>
+    <div class="card">
+      <div class="field"><label>New password (min 8 characters)</label><input id="pw" type="password"/></div>
+      <div class="field"><label>Confirm password</label><input id="pw2" type="password"/></div>
+      <button class="btn" style="width:100%" id="go">Set password</button>
+      <div class="err" id="err"></div>
+    </div></div></div>`;
+  $("go").onclick=async()=>{
+    $("err").textContent="";
+    if($("pw").value.length<8){ $("err").textContent="Password must be at least 8 characters."; return; }
+    if($("pw").value!==$("pw2").value){ $("err").textContent="Passwords do not match."; return; }
+    try{ await api("/api/auth/set-password",{method:"POST",body:JSON.stringify({token,password:$("pw").value})});
+      history.replaceState({},"","/"); renderLogin(); toast("Password set — sign in now.");
+    }catch(e){ $("err").textContent=e.message==="invalid_or_expired_token"?"This setup link is invalid or has expired.":"Could not set password."; }
+  };
+}
+
+/* ---------- app shell ---------- */
+function navItems(){
+  const items=[{k:"orders",label:"Orders"}];
+  if(STATE.user.role==="reseller") items.push({k:"new",label:"New order"});
+  if(isShipping()) items.push({k:"queue",label:"Shipping queue"});
+  if(canManage()) items.push({k:"products",label:"Products"});
+  if(["owner","finance_manager"].includes(STATE.user.role)) items.push({k:"resellers",label:"Resellers"});
+  return items;
+}
+function renderApp(view){
+  const u=STATE.user;
+  app.innerHTML=`<div class="shell">
+    <aside class="side">
+      <div class="brand"><b>MLT</b><span>Ops</span></div>
+      <nav class="nav" id="nav">${navItems().map(i=>`<button data-k="${i.k}" class="${i.k===view?"on":""}">${esc(i.label)}</button>`).join("")}</nav>
+      <div class="foot"><b>${esc(u.name)}</b><br/>${esc(ROLE_LABEL[u.role]||u.role)}<br/>
+        <button class="btn ghost sm" style="margin-top:10px" id="logout">Sign out</button></div>
+    </aside>
+    <main class="main" id="main"></main>
+  </div>`;
+  $("nav").querySelectorAll("button").forEach(b=>b.onclick=()=>renderApp(b.dataset.k));
+  $("logout").onclick=async()=>{ await api("/api/auth/logout",{method:"POST"}); STATE.user=null; renderLogin(); };
+  const M=$("main");
+  if(view==="orders") viewOrders(M);
+  else if(view==="new") viewNewOrder(M);
+  else if(view==="queue") viewQueue(M);
+  else if(view==="products") viewProducts(M);
+  else if(view==="resellers") viewResellers(M);
+}
+
+/* ---------- orders list ---------- */
+async function viewOrders(M){
+  M.innerHTML=`<div class="head"><div><div class="eyebrow">Operations</div><h1>Orders</h1></div>
+    ${STATE.user.role==="reseller"?`<button class="btn" id="newbtn">New order</button>`:""}</div>
+    <div class="card"><div id="filters"></div><div id="list">Loading…</div></div>`;
+  if($("newbtn")) $("newbtn").onclick=()=>renderApp("new");
+  if(isStaff()){
+    $("filters").innerHTML=`<div class="row2" style="margin-bottom:14px">
+      <select id="fpay"><option value="">All payment states</option>${Object.keys(PAY_LABEL).map(k=>`<option value="${k}">${PAY_LABEL[k]}</option>`).join("")}</select>
+      <select id="fful"><option value="">All fulfilment states</option>${Object.keys(FUL_LABEL).map(k=>`<option value="${k}">${FUL_LABEL[k]}</option>`).join("")}</select></div>`;
+    $("fpay").onchange=load; $("fful").onchange=load;
+  }
+  async function load(){
+    const qs=new URLSearchParams();
+    if($("fpay")&&$("fpay").value) qs.set("paymentStatus",$("fpay").value);
+    if($("fful")&&$("fful").value) qs.set("fulfilmentStatus",$("fful").value);
+    try{
+      const {orders}=await api("/api/app/orders?"+qs.toString());
+      if(!orders.length){ $("list").innerHTML=`<div class="empty">No orders yet.</div>`; return; }
+      $("list").innerHTML=`<table><thead><tr><th>Order</th><th>Customer</th><th>Total</th><th>Payment</th><th>Fulfilment</th><th>Date</th></tr></thead>
+        <tbody>${orders.map(o=>`<tr class="row" data-id="${o.id}">
+          <td class="mono">${esc(o.orderNo)}</td><td>${esc(o.customerName)}</td>
+          <td class="mono">${money(o.orderTotal)}</td>
+          <td>${pill(PAY_LABEL,PAY_COLOR,o.paymentStatus)}</td>
+          <td>${pill(FUL_LABEL,FUL_COLOR,o.fulfilmentStatus)}</td>
+          <td class="faint">${new Date(o.createdAt).toLocaleDateString()}</td></tr>`).join("")}</tbody></table>`;
+      $("list").querySelectorAll("tr.row").forEach(r=>r.onclick=()=>openOrder(r.dataset.id));
+    }catch(e){ $("list").innerHTML=`<div class="empty">Could not load orders.</div>`; }
+  }
+  load();
+}
+
+/* ---------- order detail (modal-ish full view) ---------- */
+async function openOrder(id){
+  const M=$("main");
+  M.innerHTML=`<div id="od">Loading…</div>`;
+  let d;
+  try{ d=await api("/api/app/orders/"+id); }catch(e){ M.innerHTML=`<div class="empty">Could not load order.</div>`; return; }
+  const o=d.order;
+  const steps=[["Ordered",true],["Released",["ready_to_pack","packed","dispatched","delivered","collected"].includes(o.fulfilmentStatus)],
+    ["Packed",["packed","dispatched","delivered","collected"].includes(o.fulfilmentStatus)],
+    ["Dispatched",["dispatched","delivered"].includes(o.fulfilmentStatus)],
+    ["Delivered",["delivered","collected"].includes(o.fulfilmentStatus)]];
+  const curIdx=steps.reduce((a,s,i)=>s[1]?i:a,0);
+  M.innerHTML=`
+    <div class="head"><div><div class="eyebrow">Order</div><h1 class="mono">${esc(o.orderNo)}</h1></div>
+      <button class="btn ghost" id="back">← Back</button></div>
+    <div class="grid" style="grid-template-columns:1.5fr 1fr">
+      <div class="card">
+        <div class="track">${steps.map((s,i)=>`<div class="step ${s[1]?"done":""} ${i===curIdx&&i<4&&!( o.fulfilmentStatus==='delivered'||o.fulfilmentStatus==='collected')?"cur":""}">${s[0]}</div>`).join("")}</div>
+        <div style="display:flex;gap:8px;margin:14px 0">${pill(PAY_LABEL,PAY_COLOR,o.paymentStatus)} ${pill(FUL_LABEL,FUL_COLOR,o.fulfilmentStatus)}</div>
+        <table><thead><tr><th>Item</th><th>Qty</th><th>Unit</th><th>Line</th></tr></thead><tbody>
+          ${d.items.map(it=>`<tr><td>${esc(it.productName)}<br/><span class="faint mono">${esc(it.productCode)}</span></td>
+            <td class="mono">${it.qty}</td><td class="mono">${money(it.unitPrice)}</td><td class="mono">${money(it.lineTotal)}</td></tr>`).join("")}
+        </tbody></table>
+        <div style="display:flex;justify-content:space-between;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+          <div><div class="faint">Total</div><div class="mono" style="font-size:18px">${money(o.orderTotal)}</div></div>
+          <div><div class="faint">Verified</div><div class="mono" style="font-size:18px">${money(o.amountVerified)}</div></div>
+          <div><div class="faint">Balance due</div><div class="mono" style="font-size:18px">${money(o.balanceDue)}</div></div>
+        </div>
+      </div>
+      <div class="grid">
+        <div class="card"><h3 style="margin-bottom:10px">Customer</h3>
+          <div class="muted">${esc(o.customerName)}</div><div class="muted">${esc(o.customerPhone)}</div>
+          ${o.customerEmail?`<div class="muted">${esc(o.customerEmail)}</div>`:""}
+          <div class="faint" style="margin-top:8px">${esc(o.deliveryAddress)}</div></div>
+        <div id="actions"></div>
+      </div>
+    </div>`;
+  $("back").onclick=()=>renderApp("orders");
+  renderActions($("actions"),o,d,id);
+}
+
+function renderActions(box,o,d,id){
+  let html="";
+  if(isFinance() && ["awaiting_payment","review_pending","cash_pending","partial_verified","needs_clarification"].includes(o.paymentStatus)){
+    html+=`<div class="card"><h3 style="margin-bottom:12px">Payment review</h3>
+      <div class="field"><label>Result</label><select id="pr_result">
+        <option value="full_verified">Paid in full</option>
+        <option value="partial_verified">Partial payment verified</option>
+        <option value="not_found">Payment not found</option>
+        <option value="needs_clarification">Needs clarification</option></select></div>
+      <div class="field"><label>Amount verified (£)</label><input id="pr_amt" type="number" step="0.01" value="${Number(o.orderTotal).toFixed(2)}"/></div>
+      <div class="field"><label>Bank reference</label><input id="pr_ref"/></div>
+      <div class="field" id="pr_partialwrap" style="display:none">
+        <label><input type="checkbox" id="pr_partial" style="width:auto;margin-right:6px"/>Approve partial release (exception)</label></div>
+      <button class="btn" id="pr_go" style="width:100%">Save review</button></div>`;
+  }
+  if(isShipping() && o.paymentStatus!=="awaiting_payment"){
+    const fs=o.fulfilmentStatus; const acts=[];
+    if(fs==="ready_to_pack") acts.push(["pack","Mark packed"]);
+    if(fs==="ready_to_pack"||fs==="packed") acts.push(["collect","Mark collected"]);
+    if(fs==="packed") acts.push(["dispatch","Dispatch…"]);
+    if(fs==="dispatched") acts.push(["deliver","Mark delivered"]);
+    if(fs!=="issue_hold"&&!["delivered","collected","cancelled"].includes(fs)) acts.push(["issue","Flag issue…"]);
+    if(fs==="issue_hold") acts.push(["resolve","Resolve hold"]);
+    if(acts.length) html+=`<div class="card"><h3 style="margin-bottom:12px">Fulfilment</h3>
+      <div id="ship_extra"></div>
+      <div style="display:flex;flex-direction:column;gap:8px">${acts.map(a=>`<button class="btn ghost" data-a="${a[0]}">${a[1]}</button>`).join("")}</div></div>`;
+  }
+  box.innerHTML=html||`<div class="card muted">No actions available for your role at this stage.</div>`;
+
+  if($("pr_result")){
+    const sync=()=>{ $("pr_partialwrap").style.display=$("pr_result").value==="partial_verified"?"block":"none"; };
+    $("pr_result").onchange=sync; sync();
+    $("pr_go").onclick=async()=>{
+      const result=$("pr_result").value;
+      const body={result,amountVerified:$("pr_amt").value,bankReference:$("pr_ref").value,releaseToShipping:true};
+      if(result==="partial_verified") body.approvePartialRelease=$("pr_partial").checked;
+      try{ const r=await api("/api/app/orders/"+id+"/payment-review",{method:"POST",body:JSON.stringify(body)});
+        toast(r.released?"Reviewed & released to shipping":"Payment review saved"); openOrder(id);
+      }catch(e){ toast(e.message==="partial_release_needs_approval"?"Tick the partial-release exception to release":"Could not save review",true); }
+    };
+  }
+  box.querySelectorAll("[data-a]").forEach(b=>b.onclick=()=>shipAction(b.dataset.a,id));
+}
+
+async function shipAction(action,id){
+  let body={action};
+  if(action==="dispatch"){
+    const courier=prompt("Courier?"); if(!courier) return;
+    const tracking=prompt("Tracking number?"); if(!tracking) return;
+    body.courier=courier; body.trackingNumber=tracking;
+  }
+  if(action==="deliver"||action==="collect"){ body.receivedBy=prompt("Received by (optional)")||undefined; }
+  if(action==="issue"){ body.issueType=prompt("Issue type?")||"unspecified"; body.issueNotes=prompt("Notes?")||undefined; }
+  try{ await api("/api/app/orders/"+id+"/fulfilment",{method:"POST",body:JSON.stringify(body)}); toast("Updated"); openOrder(id); }
+  catch(e){ toast("Could not update: "+e.message,true); }
+}
+
+/* ---------- new order ---------- */
+async function viewNewOrder(M){
+  M.innerHTML=`<div class="head"><div><div class="eyebrow">Operations</div><h1>New order</h1></div></div>
+    <div class="grid" style="grid-template-columns:1.4fr 1fr">
+      <div class="card"><h3 style="margin-bottom:12px">Products</h3><div id="prodlist">Loading…</div></div>
+      <div class="card"><h3 style="margin-bottom:12px">Customer & delivery</h3>
+        <div class="field"><label>Delivery type</label><select id="dtype">
+          <option value="direct_to_customer">Direct to customer</option>
+          <option value="reseller_self_order">Reseller self-order</option>
+          <option value="reseller_collection">Collection</option></select></div>
+        <div class="field"><label>Customer name</label><input id="cname"/></div>
+        <div class="field"><label>Phone</label><input id="cphone"/></div>
+        <div class="field"><label>Email (optional)</label><input id="cemail"/></div>
+        <div class="field"><label>Delivery address</label><textarea id="caddr" rows="2"></textarea></div>
+        <div id="cart" class="faint" style="margin:10px 0">No items yet.</div>
+        <button class="btn" id="submit" style="width:100%">Place order</button>
+        <div class="err" id="oerr"></div></div>
+    </div>`;
+  let products=[]; const cart={};
+  try{ products=(await api("/api/app/products")).products; }catch(e){}
+  if(!products.length){ $("prodlist").innerHTML=`<div class="empty">No products available yet.</div>`; }
+  else $("prodlist").innerHTML=products.map(p=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+    <div><div>${esc(p.name)}</div><div class="faint mono">${esc(p.code)} · ${money(p.price)}</div></div>
+    <input type="number" min="0" value="0" data-code="${esc(p.code)}" style="width:64px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:6px;border-radius:6px"/></div>`).join("");
+  const refreshCart=()=>{
+    const lines=Object.entries(cart).filter(([,q])=>q>0);
+    $("cart").innerHTML=lines.length?lines.map(([c,q])=>`${esc(c)} × ${q}`).join(" · "):"No items yet.";
+  };
+  $("prodlist").querySelectorAll("input").forEach(inp=>inp.oninput=()=>{ cart[inp.dataset.code]=parseInt(inp.value||"0",10); refreshCart(); });
+  $("submit").onclick=async()=>{
+    $("oerr").textContent="";
+    const items=Object.entries(cart).filter(([,q])=>q>0).map(([productCode,qty])=>({productCode,qty}));
+    if(!items.length){ $("oerr").textContent="Add at least one item."; return; }
+    const body={deliveryType:$("dtype").value,customerName:$("cname").value.trim(),customerPhone:$("cphone").value.trim(),
+      customerEmail:$("cemail").value.trim()||undefined,deliveryAddress:$("caddr").value.trim(),items,
+      clientRequestId:"web-"+Date.now()};
+    try{ const r=await api("/api/app/orders",{method:"POST",body:JSON.stringify(body)}); toast("Order "+r.order.orderNo+" placed"); openOrder(r.order.id); }
+    catch(e){ $("oerr").textContent="Could not place order: "+e.message; }
+  };
+}
+
+/* ---------- shipping queue ---------- */
+async function viewQueue(M){
+  M.innerHTML=`<div class="head"><div><div class="eyebrow">Warehouse</div><h1>Shipping queue</h1></div></div>
+    <div class="card"><div id="q">Loading…</div></div>`;
+  try{
+    const all=[];
+    for(const st of ["ready_to_pack","packed","dispatched","issue_hold"]){
+      const {orders}=await api("/api/app/orders?fulfilmentStatus="+st); all.push(...orders);
+    }
+    if(!all.length){ $("q").innerHTML=`<div class="empty">Nothing in the queue.</div>`; return; }
+    $("q").innerHTML=`<table><thead><tr><th>Order</th><th>Customer</th><th>Stage</th><th>Total</th></tr></thead><tbody>
+      ${all.map(o=>`<tr class="row" data-id="${o.id}"><td class="mono">${esc(o.orderNo)}</td><td>${esc(o.customerName)}</td>
+        <td>${pill(FUL_LABEL,FUL_COLOR,o.fulfilmentStatus)}</td><td class="mono">${money(o.orderTotal)}</td></tr>`).join("")}</tbody></table>`;
+    $("q").querySelectorAll("tr.row").forEach(r=>r.onclick=()=>openOrder(r.dataset.id));
+  }catch(e){ $("q").innerHTML=`<div class="empty">Could not load queue.</div>`; }
+}
+
+/* ---------- products ---------- */
+async function viewProducts(M){
+  M.innerHTML=`<div class="head"><div><div class="eyebrow">Catalog</div><h1>Products</h1></div>
+    <button class="btn" id="addp">Add product</button></div>
+    <div class="card"><div id="plist">Loading…</div></div>`;
+  $("addp").onclick=()=>productForm();
+  async function load(){
+    try{ const {products}=await api("/api/app/products");
+      if(!products.length){ $("plist").innerHTML=`<div class="empty">No products yet. Add your first to enable ordering.</div>`; return; }
+      $("plist").innerHTML=`<table><thead><tr><th>Code</th><th>Name</th><th>Category</th><th>Price</th><th>Status</th><th></th></tr></thead><tbody>
+        ${products.map(p=>`<tr><td class="mono">${esc(p.code)}</td><td>${esc(p.name)}</td><td class="faint">${esc(p.category||"—")}</td>
+          <td class="mono">${p.price==null?'<span class="s-red pill">no price</span>':money(p.price)}</td>
+          <td>${esc(p.status)}</td><td><button class="btn ghost sm" data-code="${esc(p.code)}">Edit</button></td></tr>`).join("")}</tbody></table>`;
+      $("plist").querySelectorAll("[data-code]").forEach(b=>b.onclick=()=>{ const p=products.find(x=>x.code===b.dataset.code); productForm(p); });
+    }catch(e){ $("plist").innerHTML=`<div class="empty">Could not load products.</div>`; }
+  }
+  function productForm(p){
+    M.innerHTML=`<div class="head"><div><div class="eyebrow">Catalog</div><h1>${p?"Edit product":"Add product"}</h1></div>
+      <button class="btn ghost" id="back">← Back</button></div>
+      <div class="card" style="max-width:480px">
+        <div class="field"><label>Code</label><input id="code" ${p?"disabled":""} value="${p?esc(p.code):""}"/></div>
+        <div class="field"><label>Name</label><input id="name" value="${p?esc(p.name):""}"/></div>
+        <div class="field"><label>Category</label><input id="cat" value="${p&&p.category?esc(p.category):""}"/></div>
+        <div class="field"><label>Price (£)</label><input id="price" type="number" step="0.01" value="${p&&p.price!=null?p.price:""}"/></div>
+        <div class="field"><label>Status</label><select id="status">
+          <option value="available" ${p&&p.status==="available"?"selected":""}>Available</option>
+          <option value="out_of_stock" ${p&&p.status==="out_of_stock"?"selected":""}>Out of stock</option>
+          <option value="inactive" ${p&&p.status==="inactive"?"selected":""}>Inactive</option></select></div>
+        <button class="btn" id="save" style="width:100%">${p?"Save changes":"Create product"}</button>
+        <div class="err" id="perr"></div></div>`;
+    $("back").onclick=()=>viewProducts(M);
+    $("save").onclick=async()=>{
+      $("perr").textContent="";
+      const body={code:$("code").value.trim(),name:$("name").value.trim(),category:$("cat").value.trim()||undefined,
+        price:$("price").value===""?undefined:$("price").value,status:$("status").value};
+      try{ await api("/api/app/products",{method:"POST",body:JSON.stringify(body)}); toast("Saved"); viewProducts(M); }
+      catch(e){ $("perr").textContent="Could not save: "+e.message; }
+    };
+  }
+  load();
+}
+
+/* ---------- resellers ---------- */
+async function viewResellers(M){
+  M.innerHTML=`<div class="head"><div><div class="eyebrow">Accounts</div><h1>Resellers</h1></div>
+    <button class="btn" id="addr">Add reseller</button></div>
+    <div class="card"><div id="rlist">Loading…</div></div>`;
+  $("addr").onclick=()=>resellerForm();
+  async function load(){
+    try{ const {resellers}=await api("/api/app/resellers");
+      if(!resellers.length){ $("rlist").innerHTML=`<div class="empty">No resellers yet.</div>`; return; }
+      $("rlist").innerHTML=`<table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Status</th></tr></thead><tbody>
+        ${resellers.map(r=>`<tr><td>${esc(r.name)}</td><td class="faint">${esc(r.email)}</td><td class="faint">${esc(r.phone||"—")}</td><td>${esc(r.status)}</td></tr>`).join("")}</tbody></table>`;
+    }catch(e){ $("rlist").innerHTML=`<div class="empty">Could not load resellers.</div>`; }
+  }
+  function resellerForm(){
+    M.innerHTML=`<div class="head"><div><div class="eyebrow">Accounts</div><h1>Add reseller</h1></div>
+      <button class="btn ghost" id="back">← Back</button></div>
+      <div class="card" style="max-width:480px">
+        <div class="field"><label>Business name</label><input id="name"/></div>
+        <div class="field"><label>Contact email</label><input id="email"/></div>
+        <div class="field"><label>Phone</label><input id="phone"/></div>
+        <div class="field"><label>Address</label><textarea id="addr" rows="2"></textarea></div>
+        <div class="field"><label>Login email (defaults to contact email)</label><input id="lemail"/></div>
+        <button class="btn" id="save" style="width:100%">Create reseller</button>
+        <div class="err" id="rerr"></div><div id="rok"></div></div>`;
+    $("back").onclick=()=>viewResellers(M);
+    $("save").onclick=async()=>{
+      $("rerr").textContent="";
+      const body={name:$("name").value.trim(),email:$("email").value.trim(),phone:$("phone").value.trim()||undefined,
+        address:$("addr").value.trim()||undefined,loginEmail:$("lemail").value.trim()||undefined};
+      try{ const r=await api("/api/app/resellers",{method:"POST",body:JSON.stringify(body)});
+        $("rok").innerHTML=`<div class="ok" style="margin-top:12px">Reseller created. Send them this one-time setup link:</div>
+          <div class="linkbox" style="margin-top:8px">${esc(r.setupLink)}</div>`;
+        toast("Reseller created");
+      }catch(e){ $("rerr").textContent="Could not create: "+e.message; }
+    };
+  }
+  load();
+}
+
+boot();
+</script>
+</body>
+</html>
