@@ -545,6 +545,396 @@ app.get("/api/app/orders/:id", async (c) => {
   return c.json({ order: { ...order, balanceDue }, items, payments: pays, fulfilment: ful ?? null });
 });
 
+/* ============================================================
+ * PAYMENT REVIEW + RELEASE  (finance)
+ * Authorization is enforced HERE on the server — not in the UI.
+ * The old system allowed direct calls to bypass the hidden-button
+ * checks; these routes can't be bypassed that way.
+ * ========================================================== */
+
+const RELEASABLE_FROM = "not_released";
+
+app.post(
+  "/api/app/orders/:id/payment-review",
+  requireRole("owner", "finance_manager", "finance_team"),
+  async (c) => {
+    const db = getDb(c.env.DATABASE_URL);
+    const actor = c.get("user");
+    const id = c.req.param("id");
+    const body = await c.req.json<{
+      method?: (typeof schema.payments.$inferSelect)["method"];
+      amountVerified?: number | string;
+      result?: (typeof schema.orders.$inferSelect)["paymentStatus"];
+      bankReference?: string;
+      notes?: string;
+      proofKey?: string;
+      releaseToShipping?: boolean;
+      approvePartialRelease?: boolean;
+    }>();
+
+    const allowed = [
+      "full_verified",
+      "partial_verified",
+      "not_found",
+      "needs_clarification",
+    ] as const;
+    if (!body.result || !(allowed as readonly string[]).includes(body.result)) {
+      return c.json({ error: "invalid_result" }, 400);
+    }
+
+    const [order] = await db
+      .select()
+      .from(schema.orders)
+      .where(eq(schema.orders.id, id))
+      .limit(1);
+    if (!order) return c.json({ error: "not_found" }, 404);
+
+    const amountVerified = Number(body.amountVerified ?? 0);
+    if (amountVerified < 0) return c.json({ error: "invalid_amount" }, 400);
+
+    // decide whether this review releases the order to shipping.
+    // BUSINESS RULE (TODO confirm with Diego): full payment releases by
+    // default; a partial payment only releases when a finance user
+    // explicitly approves the exception (approvePartialRelease).
+    let willRelease = false;
+    if (body.releaseToShipping !== false) {
+      if (body.result === "full_verified") willRelease = true;
+      else if (body.result === "partial_verified" && body.approvePartialRelease)
+        willRelease = true;
+    }
+    if (
+      body.result === "partial_verified" &&
+      body.releaseToShipping &&
+      !body.approvePartialRelease
+    ) {
+      return c.json({ error: "partial_release_needs_approval" }, 422);
+    }
+
+    const canRelease =
+      willRelease && order.fulfilmentStatus === RELEASABLE_FROM;
+
+    const writes: any[] = [
+      db.insert(schema.payments).values({
+        orderId: id,
+        method: body.method ?? "bank_transfer",
+        amountClaimed: order.amountClaimed,
+        amountVerified: amountVerified.toFixed(2),
+        result: body.result,
+        bankReference: body.bankReference ?? null,
+        proofKey: body.proofKey ?? null,
+        reviewedBy: actor.id,
+        reviewedAt: new Date(),
+        notes: body.notes ?? null,
+      }),
+      db
+        .update(schema.orders)
+        .set({
+          paymentStatus: body.result,
+          amountVerified: amountVerified.toFixed(2),
+          fulfilmentStatus: canRelease ? "ready_to_pack" : order.fulfilmentStatus,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.orders.id, id)),
+      db.insert(schema.auditLog).values({
+        userId: actor.id,
+        userEmail: actor.email,
+        userRole: actor.role,
+        action: "payment_review",
+        orderId: id,
+        oldValue: order.paymentStatus,
+        newValue: body.result,
+        notes: canRelease ? "released_to_shipping" : null,
+      }),
+    ];
+    if (canRelease) {
+      writes.push(
+        db
+          .update(schema.fulfilment)
+          .set({
+            previousStatus: RELEASABLE_FROM,
+            status: "ready_to_pack",
+            releasedBy: actor.id,
+            releasedAt: new Date(),
+          })
+          .where(eq(schema.fulfilment.orderId, id))
+      );
+    }
+    await db.batch(writes as any);
+
+    return c.json({ ok: true, released: canRelease, paymentStatus: body.result });
+  }
+);
+
+/* ============================================================
+ * SHIPPING / FULFILMENT TRANSITIONS  (warehouse)
+ * ========================================================== */
+
+const FULFILMENT_TRANSITIONS: Record<
+  string,
+  { from: string[]; to: string }
+> = {
+  pack: { from: ["ready_to_pack"], to: "packed" },
+  dispatch: { from: ["packed"], to: "dispatched" },
+  deliver: { from: ["dispatched"], to: "delivered" },
+  collect: { from: ["ready_to_pack", "packed"], to: "collected" },
+};
+
+app.post(
+  "/api/app/orders/:id/fulfilment",
+  requireRole("owner", "shipping_manager", "shipping_team"),
+  async (c) => {
+    const db = getDb(c.env.DATABASE_URL);
+    const actor = c.get("user");
+    const id = c.req.param("id");
+    const body = await c.req.json<{
+      action?: string;
+      courier?: string;
+      shippingService?: string;
+      trackingNumber?: string;
+      receivedBy?: string;
+      confirmationSource?: string;
+      issueType?: string;
+      issueNotes?: string;
+    }>();
+
+    const [ful] = await db
+      .select()
+      .from(schema.fulfilment)
+      .where(eq(schema.fulfilment.orderId, id))
+      .limit(1);
+    if (!ful) return c.json({ error: "not_found" }, 404);
+
+    const action = body.action ?? "";
+    const patch: Partial<typeof schema.fulfilment.$inferInsert> = {
+      previousStatus: ful.status,
+    };
+    let newStatus: string;
+
+    if (action === "issue") {
+      newStatus = "issue_hold";
+      patch.issueType = body.issueType ?? null;
+      patch.issueNotes = body.issueNotes ?? null;
+    } else if (action === "resolve") {
+      if (ful.status !== "issue_hold")
+        return c.json({ error: "not_on_hold" }, 422);
+      newStatus = ful.previousStatus ?? "ready_to_pack";
+    } else {
+      const t = FULFILMENT_TRANSITIONS[action];
+      if (!t) return c.json({ error: "unknown_action" }, 400);
+      if (!t.from.includes(ful.status)) {
+        return c.json(
+          { error: "invalid_transition", from: ful.status, action },
+          422
+        );
+      }
+      newStatus = t.to;
+      if (action === "dispatch") {
+        if (!body.trackingNumber || !body.courier)
+          return c.json({ error: "courier_and_tracking_required" }, 400);
+        patch.courier = body.courier;
+        patch.shippingService = body.shippingService ?? null;
+        patch.trackingNumber = body.trackingNumber;
+        patch.dispatchedBy = actor.id;
+        patch.dispatchedAt = new Date();
+      }
+      if (action === "pack") {
+        patch.packedBy = actor.id;
+        patch.packedAt = new Date();
+      }
+      if (action === "deliver" || action === "collect") {
+        patch.receivedBy = body.receivedBy ?? null;
+        patch.confirmationSource = body.confirmationSource ?? null;
+        patch.completedAt = new Date();
+      }
+    }
+
+    patch.status = newStatus as any;
+
+    await db.batch([
+      db.update(schema.fulfilment).set(patch).where(eq(schema.fulfilment.orderId, id)),
+      db
+        .update(schema.orders)
+        .set({ fulfilmentStatus: newStatus as any, updatedAt: new Date() })
+        .where(eq(schema.orders.id, id)),
+      db.insert(schema.auditLog).values({
+        userId: actor.id,
+        userEmail: actor.email,
+        userRole: actor.role,
+        action: `fulfilment_${action}`,
+        orderId: id,
+        oldValue: ful.status,
+        newValue: newStatus,
+      }),
+    ] as any);
+
+    return c.json({ ok: true, status: newStatus });
+  }
+);
+
+/* ============================================================
+ * PRODUCTS
+ * ========================================================== */
+
+// List products. Resellers see only available ones (for ordering).
+app.get("/api/app/products", async (c) => {
+  const db = getDb(c.env.DATABASE_URL);
+  const actor = c.get("user");
+  const rows = await db.select().from(schema.products);
+  const visible =
+    actor.role === "reseller"
+      ? rows.filter((p) => p.status === "available" && p.price != null)
+      : rows;
+  return c.json({ products: visible });
+});
+
+// Create or update a product (by code). Owner/managers only.
+app.post(
+  "/api/app/products",
+  requireRole("owner", "finance_manager", "shipping_manager"),
+  async (c) => {
+    const db = getDb(c.env.DATABASE_URL);
+    const body = await c.req.json<{
+      code?: string;
+      name?: string;
+      category?: string;
+      price?: number | string;
+      status?: (typeof schema.products.$inferSelect)["status"];
+      qboItemName?: string;
+    }>();
+    const code = (body.code ?? "").trim();
+    const name = (body.name ?? "").trim();
+    if (!code || !name) return c.json({ error: "code_and_name_required" }, 400);
+
+    const price =
+      body.price === undefined || body.price === null
+        ? null
+        : Number(body.price).toFixed(2);
+
+    const [existing] = await db
+      .select()
+      .from(schema.products)
+      .where(eq(schema.products.code, code))
+      .limit(1);
+
+    if (existing) {
+      const [p] = await db
+        .update(schema.products)
+        .set({
+          name,
+          category: body.category ?? existing.category,
+          price: price ?? existing.price,
+          status: body.status ?? existing.status,
+          qboItemName: body.qboItemName ?? existing.qboItemName,
+        })
+        .where(eq(schema.products.id, existing.id))
+        .returning();
+      return c.json({ ok: true, product: p, updated: true });
+    }
+
+    const [p] = await db
+      .insert(schema.products)
+      .values({
+        code,
+        name,
+        category: body.category ?? null,
+        price,
+        status: body.status ?? "available",
+        qboItemName: body.qboItemName ?? null,
+      })
+      .returning();
+    return c.json({ ok: true, product: p });
+  }
+);
+
+/* ============================================================
+ * RESELLERS  (profile + linked login in one step)
+ * ========================================================== */
+
+app.get(
+  "/api/app/resellers",
+  requireRole("owner", "finance_manager", "shipping_manager", "finance_team", "shipping_team"),
+  async (c) => {
+    const db = getDb(c.env.DATABASE_URL);
+    const rows = await db.select().from(schema.resellers);
+    return c.json({ resellers: rows });
+  }
+);
+
+app.post(
+  "/api/app/resellers",
+  requireRole("owner", "finance_manager"),
+  async (c) => {
+    const db = getDb(c.env.DATABASE_URL);
+    const actor = c.get("user");
+    const body = await c.req.json<{
+      name?: string;
+      email?: string;
+      phone?: string;
+      address?: string;
+      loginEmail?: string;
+      loginName?: string;
+    }>();
+    const name = (body.name ?? "").trim();
+    const email = (body.email ?? "").trim().toLowerCase();
+    if (!name || !email) return c.json({ error: "name_and_email_required" }, 400);
+
+    const loginEmail = (body.loginEmail ?? email).trim().toLowerCase();
+
+    const [existingUser] = await db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.email, loginEmail))
+      .limit(1);
+    if (existingUser) return c.json({ error: "login_email_exists" }, 409);
+
+    const [reseller] = await db
+      .insert(schema.resellers)
+      .values({
+        name,
+        email,
+        phone: body.phone ?? null,
+        address: body.address ?? null,
+      })
+      .returning();
+
+    const [user] = await db
+      .insert(schema.users)
+      .values({
+        email: loginEmail,
+        name: body.loginName ?? name,
+        role: "reseller",
+        status: "active",
+        forcePasswordSetup: true,
+        resellerId: reseller.id,
+      })
+      .returning();
+
+    const raw = generateToken();
+    const tokenHash = await hashToken(raw);
+    await db.insert(schema.passwordTokens).values({
+      userId: user.id,
+      tokenHash,
+      purpose: "set",
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    });
+    await db.insert(schema.auditLog).values({
+      userId: actor.id,
+      userEmail: actor.email,
+      userRole: actor.role,
+      action: "reseller_created",
+      notes: reseller.id,
+    });
+
+    const setupLink = `${c.env.APP_BASE_URL}/set-password?token=${raw}`;
+    return c.json({
+      ok: true,
+      reseller,
+      login: { id: user.id, email: user.email },
+      setupLink, // TODO(email): send via Resend instead of returning
+    });
+  }
+);
+
 /* ---------- health ---------- */
 
 app.get("/api/health", async (c) => {
