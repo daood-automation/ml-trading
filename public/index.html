@@ -629,12 +629,23 @@ async function viewQueue(M){
 /* ---------- products ---------- */
 async function viewProducts(M){
   M.innerHTML=`<div class="head"><div><div class="eyebrow">Catalog</div><h1>Products</h1></div>
-    <button class="btn" id="addp">Add product</button></div>
+    <div style="display:flex;gap:10px">
+      ${STATE.user.role==="owner"?`<button class="btn ghost" id="importp">Import 70-product catalog</button>`:""}
+      <button class="btn" id="addp">Add product</button></div></div>
+    <div id="pnote"></div>
     <div class="card"><div id="plist">Loading…</div></div>`;
   $("addp").onclick=()=>productForm();
+  if($("importp")) $("importp").onclick=async()=>{
+    $("importp").disabled=true; $("importp").textContent="Importing…";
+    try{ const r=await api("/api/app/products/import-catalog",{method:"POST"});
+      toast(`Imported ${r.added} products (${r.skipped} already existed)`); viewProducts(M);
+    }catch(e){ toast("Import failed: "+e.message,true); $("importp").disabled=false; $("importp").textContent="Import 70-product catalog"; }
+  };
   async function load(){
     try{ const {products}=await api("/api/app/products");
-      if(!products.length){ $("plist").innerHTML=`<div class="empty">No products yet. Add your first to enable ordering.</div>`; return; }
+      if(!products.length){ $("plist").innerHTML=`<div class="empty">No products yet. ${STATE.user.role==="owner"?"Click “Import 70-product catalog” to load them all, then set prices.":"Add your first to enable ordering."}</div>`; return; }
+      const unpriced=products.filter(p=>p.price==null).length;
+      if(unpriced) $("pnote").innerHTML=`<div class="card" style="margin-bottom:16px;border-color:#FDE68A;background:#FFFBEB;box-shadow:none"><span class="muted">${unpriced} product${unpriced>1?"s":""} still need a price. Products without a price can't be ordered — set them below.</span></div>`;
       $("plist").innerHTML=`<table><thead><tr><th>Code</th><th>Name</th><th>Category</th><th>Price</th><th>Status</th><th></th></tr></thead><tbody>
         ${products.map(p=>`<tr><td class="mono">${esc(p.code)}</td><td>${esc(p.name)}</td><td class="faint">${esc(p.category||"—")}</td>
           <td class="mono">${p.price==null?'<span class="s-red pill">no price</span>':money(p.price)}</td>

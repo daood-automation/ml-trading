@@ -1,0 +1,632 @@
+[
+{
+"code": "RTP40",
+"name": "Retatrutide 40mg Pen",
+"category": "Pens",
+"retail": null,
+"reseller": null,
+"qbo": "RTP40",
+"status": "Available"
+},
+{
+"code": "TRP40",
+"name": "Tirzepatide 40mg Pen",
+"category": "Pens",
+"retail": null,
+"reseller": null,
+"qbo": "TRP40",
+"status": "Available"
+},
+{
+"code": "GLP60",
+"name": "Glow60 Pen",
+"category": "Pens",
+"retail": null,
+"reseller": null,
+"qbo": "GLP60",
+"status": "Available"
+},
+{
+"code": "MTP10P",
+"name": "MOTS-C Pen",
+"category": "Pens",
+"retail": null,
+"reseller": null,
+"qbo": "MTP10P",
+"status": "Inactive"
+},
+{
+"code": "RT05",
+"name": "Retatrutide 5mg",
+"category": "Retatrutide",
+"retail": null,
+"reseller": null,
+"qbo": "RT05",
+"status": "Available"
+},
+{
+"code": "RT10",
+"name": "Retatrutide 10mg",
+"category": "Retatrutide",
+"retail": null,
+"reseller": null,
+"qbo": "RT10",
+"status": "Available"
+},
+{
+"code": "RT30",
+"name": "Retatrutide 30mg",
+"category": "Retatrutide",
+"retail": null,
+"reseller": null,
+"qbo": "RT30",
+"status": "Available"
+},
+{
+"code": "RT40",
+"name": "Retatrutide 40mg",
+"category": "Retatrutide",
+"retail": null,
+"reseller": null,
+"qbo": "RT40",
+"status": "Available"
+},
+{
+"code": "TZ05",
+"name": "Tirzepatide 5mg",
+"category": "Tirzepatide",
+"retail": null,
+"reseller": null,
+"qbo": "TZ05",
+"status": "Available"
+},
+{
+"code": "TZ10",
+"name": "Tirzepatide 10mg",
+"category": "Tirzepatide",
+"retail": null,
+"reseller": null,
+"qbo": "TZ10",
+"status": "Available"
+},
+{
+"code": "TZ15",
+"name": "Tirzepatide 15mg",
+"category": "Tirzepatide",
+"retail": null,
+"reseller": null,
+"qbo": "TZ15",
+"status": "Available"
+},
+{
+"code": "TZ20",
+"name": "Tirzepatide 20mg",
+"category": "Tirzepatide",
+"retail": null,
+"reseller": null,
+"qbo": "TZ20",
+"status": "Available"
+},
+{
+"code": "TZ40",
+"name": "Tirzepatide 40mg",
+"category": "Tirzepatide",
+"retail": null,
+"reseller": null,
+"qbo": "TZ40",
+"status": "Available"
+},
+{
+"code": "BP05",
+"name": "BPC-157 5mg",
+"category": "Healing & Recovery",
+"retail": null,
+"reseller": null,
+"qbo": "BP05",
+"status": "Available"
+},
+{
+"code": "BP10",
+"name": "BPC-157 10mg",
+"category": "Healing & Recovery",
+"retail": null,
+"reseller": null,
+"qbo": "BP10",
+"status": "Available"
+},
+{
+"code": "TB05",
+"name": "TB-500 5mg",
+"category": "Healing & Recovery",
+"retail": null,
+"reseller": null,
+"qbo": "TB05",
+"status": "Available"
+},
+{
+"code": "TB10",
+"name": "TB-500 10mg",
+"category": "Healing & Recovery",
+"retail": null,
+"reseller": null,
+"qbo": "TB10",
+"status": "Available"
+},
+{
+"code": "BT05",
+"name": "BPC/TB Blend 5mg/5mg",
+"category": "Healing & Recovery",
+"retail": null,
+"reseller": null,
+"qbo": "BT05",
+"status": "Available"
+},
+{
+"code": "BT10",
+"name": "BPC/TB Blend 10mg/10mg",
+"category": "Healing & Recovery",
+"retail": null,
+"reseller": null,
+"qbo": "BT10",
+"status": "Available"
+},
+{
+"code": "WV10",
+"name": "Wolverine Vial",
+"category": "Healing & Recovery",
+"retail": null,
+"reseller": null,
+"qbo": "WV10",
+"status": "Available"
+},
+{
+"code": "KPV10",
+"name": "KPV 10mg",
+"category": "Healing & Recovery",
+"retail": null,
+"reseller": null,
+"qbo": "KPV10",
+"status": "Available"
+},
+{
+"code": "GH50",
+"name": "GHK-CU 50mg",
+"category": "GHK-CU",
+"retail": null,
+"reseller": null,
+"qbo": "GH50",
+"status": "Available"
+},
+{
+"code": "GH100",
+"name": "GHK-CU 100mg",
+"category": "GHK-CU",
+"retail": null,
+"reseller": null,
+"qbo": "GH100",
+"status": "Available"
+},
+{
+"code": "MC10",
+"name": "MOTS-C 10mg",
+"category": "MOTS-C",
+"retail": null,
+"reseller": null,
+"qbo": "MC10",
+"status": "Available"
+},
+{
+"code": "ND500",
+"name": "NAD+ 500mg",
+"category": "NAD+",
+"retail": null,
+"reseller": null,
+"qbo": "ND500",
+"status": "Available"
+},
+{
+"code": "ND1000",
+"name": "NAD+ 1000mg",
+"category": "NAD+",
+"retail": null,
+"reseller": null,
+"qbo": "ND1000",
+"status": "Available"
+},
+{
+"code": "TS05",
+"name": "Tesamorelin 5mg",
+"category": "Growth Hormones & Secretagogues",
+"retail": null,
+"reseller": null,
+"qbo": "TS05",
+"status": "Available"
+},
+{
+"code": "TS06",
+"name": "Tesamorelin 6mg",
+"category": "Growth Hormones & Secretagogues",
+"retail": null,
+"reseller": null,
+"qbo": "TS06",
+"status": "Available"
+},
+{
+"code": "TS10",
+"name": "Tesamorelin 10mg",
+"category": "Growth Hormones & Secretagogues",
+"retail": null,
+"reseller": null,
+"qbo": "TS10",
+"status": "Available"
+},
+{
+"code": "CJ02",
+"name": "CJC-1295 no DAC 2mg",
+"category": "Growth Hormones & Secretagogues",
+"retail": null,
+"reseller": null,
+"qbo": "CJ02",
+"status": "Available"
+},
+{
+"code": "CD02",
+"name": "CJC-1295 DAC 2mg",
+"category": "Growth Hormones & Secretagogues",
+"retail": null,
+"reseller": null,
+"qbo": "CD02",
+"status": "Available"
+},
+{
+"code": "IP02",
+"name": "Ipamorelin 2mg",
+"category": "Growth Hormones & Secretagogues",
+"retail": null,
+"reseller": null,
+"qbo": "IP02",
+"status": "Available"
+},
+{
+"code": "IP05",
+"name": "Ipamorelin 5mg",
+"category": "Growth Hormones & Secretagogues",
+"retail": null,
+"reseller": null,
+"qbo": "IP05",
+"status": "Available"
+},
+{
+"code": "IG01",
+"name": "IGF-1 LR3 1mg",
+"category": "Growth Hormones & Secretagogues",
+"retail": null,
+"reseller": null,
+"qbo": "IG01",
+"status": "Available"
+},
+{
+"code": "HG10",
+"name": "HGH 10IU",
+"category": "Growth Hormones & Secretagogues",
+"retail": null,
+"reseller": null,
+"qbo": "HG10",
+"status": "Available"
+},
+{
+"code": "HF05",
+"name": "HGH Fragment 5mg",
+"category": "Growth Hormones & Secretagogues",
+"retail": null,
+"reseller": null,
+"qbo": "HF05",
+"status": "Available"
+},
+{
+"code": "GP02",
+"name": "GHRP-2 10mg",
+"category": "Growth Hormones & Secretagogues",
+"retail": null,
+"reseller": null,
+"qbo": "GP02",
+"status": "Available"
+},
+{
+"code": "GP06",
+"name": "GHRP-6 10mg",
+"category": "Growth Hormones & Secretagogues",
+"retail": null,
+"reseller": null,
+"qbo": "GP06",
+"status": "Available"
+},
+{
+"code": "SX10",
+"name": "Semax 10mg",
+"category": "Cognitive / Mood",
+"retail": null,
+"reseller": null,
+"qbo": "SX10",
+"status": "Available"
+},
+{
+"code": "SL10",
+"name": "Selank 10mg",
+"category": "Cognitive / Mood",
+"retail": null,
+"reseller": null,
+"qbo": "SL10",
+"status": "Available"
+},
+{
+"code": "DS10",
+"name": "DSIP 10mg",
+"category": "Cognitive / Mood",
+"retail": null,
+"reseller": null,
+"qbo": "DS10",
+"status": "Available"
+},
+{
+"code": "OX10",
+"name": "Oxytocin 10mg",
+"category": "Cognitive / Mood",
+"retail": null,
+"reseller": null,
+"qbo": "OX10",
+"status": "Available"
+},
+{
+"code": "OX02",
+"name": "Oxytocin 2mg",
+"category": "Cognitive / Mood",
+"retail": null,
+"reseller": null,
+"qbo": "OX02",
+"status": "Available"
+},
+{
+"code": "KP10",
+"name": "Kisspeptin 10mg",
+"category": "Cognitive / Mood",
+"retail": null,
+"reseller": null,
+"qbo": "KP10",
+"status": "Available"
+},
+{
+"code": "EP10",
+"name": "Epitalon 10mg",
+"category": "Longevity / Metabolic",
+"retail": null,
+"reseller": null,
+"qbo": "EP10",
+"status": "Available"
+},
+{
+"code": "SS10",
+"name": "SS-31 10mg",
+"category": "Longevity / Metabolic",
+"retail": null,
+"reseller": null,
+"qbo": "SS10",
+"status": "Available"
+},
+{
+"code": "AO05",
+"name": "AOD-9604 5mg",
+"category": "Longevity / Metabolic",
+"retail": null,
+"reseller": null,
+"qbo": "AO05",
+"status": "Available"
+},
+{
+"code": "CG10",
+"name": "Cagrilintide 10mg",
+"category": "Longevity / Metabolic",
+"retail": null,
+"reseller": null,
+"qbo": "CG10",
+"status": "Available"
+},
+{
+"code": "FX10",
+"name": "FOX04-DRI 10mg",
+"category": "Longevity / Metabolic",
+"retail": null,
+"reseller": null,
+"qbo": "FX10",
+"status": "Available"
+},
+{
+"code": "MB100",
+"name": "Methylene Blue 100ml",
+"category": "Longevity / Metabolic",
+"retail": null,
+"reseller": null,
+"qbo": "MB100",
+"status": "Available"
+},
+{
+"code": "TH10",
+"name": "Thymulin 10mg",
+"category": "Longevity / Metabolic",
+"retail": null,
+"reseller": null,
+"qbo": "TH10",
+"status": "Available"
+},
+{
+"code": "MT10",
+"name": "MT-2 10mg",
+"category": "Tanning & Libido",
+"retail": null,
+"reseller": null,
+"qbo": "MT10",
+"status": "Available"
+},
+{
+"code": "MT20",
+"name": "MT-2 10mg",
+"category": "Tanning & Libido",
+"retail": null,
+"reseller": null,
+"qbo": "MT20",
+"status": "Available"
+},
+{
+"code": "MT11",
+"name": "MT-1 10mg",
+"category": "Tanning & Libido",
+"retail": null,
+"reseller": null,
+"qbo": "MT11",
+"status": "Available"
+},
+{
+"code": "PT10",
+"name": "PT-141 10mg",
+"category": "Tanning & Libido",
+"retail": null,
+"reseller": null,
+"qbo": "PT10",
+"status": "Available"
+},
+{
+"code": "SXN",
+"name": "Semax Nasal",
+"category": "Nasals",
+"retail": null,
+"reseller": null,
+"qbo": "SXN",
+"status": "Available"
+},
+{
+"code": "SLN",
+"name": "Selank Nasal",
+"category": "Nasals",
+"retail": null,
+"reseller": null,
+"qbo": "SLN",
+"status": "Available"
+},
+{
+"code": "DSN",
+"name": "DSIP Nasal",
+"category": "Nasals",
+"retail": null,
+"reseller": null,
+"qbo": "DSN",
+"status": "Available"
+},
+{
+"code": "OXN",
+"name": "Oxytocin Nasal",
+"category": "Nasals",
+"retail": null,
+"reseller": null,
+"qbo": "OXN",
+"status": "Available"
+},
+{
+"code": "KPN",
+"name": "Kisspeptin Nasal",
+"category": "Nasals",
+"retail": null,
+"reseller": null,
+"qbo": "KPN",
+"status": "Available"
+},
+{
+"code": "NDN",
+"name": "NAD+ Nasal",
+"category": "Nasals",
+"retail": null,
+"reseller": null,
+"qbo": "NDN",
+"status": "Available"
+},
+{
+"code": "GLN",
+"name": "Glow Nasal",
+"category": "Nasals",
+"retail": null,
+"reseller": null,
+"qbo": "GLN",
+"status": "Available"
+},
+{
+"code": "MTN",
+"name": "Tanning Nasal",
+"category": "Nasals",
+"retail": null,
+"reseller": null,
+"qbo": "MTN",
+"status": "Available"
+},
+{
+"code": "BTN",
+"name": "BPC/TB Nasal",
+"category": "Nasals",
+"retail": null,
+"reseller": null,
+"qbo": "BTN",
+"status": "Available"
+},
+{
+"code": "SLU250",
+"name": "SLU-PP-332 250mcg",
+"category": "Tablets / Capsules",
+"retail": null,
+"reseller": null,
+"qbo": "SLU250",
+"status": "Available"
+},
+{
+"code": "SLU500",
+"name": "SLU-PP-332 500mcg",
+"category": "Tablets / Capsules",
+"retail": null,
+"reseller": null,
+"qbo": "SLU500",
+"status": "Available"
+},
+{
+"code": "TKA",
+"name": "Tongkat Ali",
+"category": "Tablets / Capsules",
+"retail": null,
+"reseller": null,
+"qbo": "TKA",
+"status": "Available"
+},
+{
+"code": "AGP",
+"name": "Alpha GPC",
+"category": "Tablets / Capsules",
+"retail": null,
+"reseller": null,
+"qbo": "AGP",
+"status": "Available"
+},
+{
+"code": "ASH",
+"name": "Ashwagandha",
+"category": "Tablets / Capsules",
+"retail": null,
+"reseller": null,
+"qbo": "ASH",
+"status": "Available"
+},
+{
+"code": "BAC",
+"name": "Bac Water 10ml",
+"category": "Water 10ml",
+"retail": null,
+"reseller": null,
+"qbo": null,
+"status": "Available"
+}
+]

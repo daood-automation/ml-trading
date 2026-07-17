@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { eq, and, desc, count, sum, gte, ne } from "drizzle-orm";
 import { getDb, schema } from "./db";
+import { CATALOG } from "./catalog";
 import {
   verifyPassword,
   hashPassword,
@@ -1050,6 +1051,34 @@ app.get(
     });
   }
 );
+
+/* ============================================================
+ * CATALOG IMPORT  (owner: load the 70-product catalog from the sheet)
+ * Idempotent — inserts only products whose code doesn't exist yet.
+ * Prices are left null; owner sets them per product afterward.
+ * ========================================================== */
+
+app.post("/api/app/products/import-catalog", requireRole("owner"), async (c) => {
+  const db = getDb(c.env.DATABASE_URL);
+  const existing = await db
+    .select({ code: schema.products.code })
+    .from(schema.products);
+  const have = new Set(existing.map((p) => p.code));
+  const toAdd = CATALOG.filter((p) => !have.has(p.code));
+  if (toAdd.length) {
+    await db.insert(schema.products).values(
+      toAdd.map((p) => ({
+        code: p.code,
+        name: p.name,
+        category: p.category || null,
+        status: p.status as (typeof schema.products.$inferSelect)["status"],
+        qboItemName: p.qboItemName ?? null,
+        price: null,
+      }))
+    );
+  }
+  return c.json({ ok: true, added: toAdd.length, skipped: CATALOG.length - toAdd.length });
+});
 
 /* ---------- health ---------- */
 
