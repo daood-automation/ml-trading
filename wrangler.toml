@@ -1,0 +1,26 @@
+name = "ml-trading"
+main = "src/index.ts"
+compatibility_date = "2024-12-30"
+compatibility_flags = ["nodejs_compat"]
+
+# --- R2 bucket for payment proof files ---
+# Re-enabled on Day 2 when we build payment-proof uploads.
+# Before uncommenting, create the bucket once:
+#   wrangler r2 bucket create ml-trading-proofs
+# [[r2_buckets]]
+# binding = "PROOFS"
+# bucket_name = "ml-trading-proofs"
+
+# --- Secrets (do NOT put values here) ---
+# Set these with `wrangler secret put NAME`, or in the Cloudflare dashboard:
+#   DATABASE_URL      -> your Neon connection string
+#   RESEND_API_KEY    -> your Resend API key
+#   SESSION_SECRET    -> a long random string (used to sign session cookies)
+#   APP_BASE_URL      -> e.g. https://ml-trading.pages.dev  (for email links)
+#
+# Nothing sensitive is committed to the repo. This is the fix for the
+# PrintNode key that was hard-coded in the old Print_Code.gs.
+
+[vars]
+# non-secret config can go here
+APP_NAME = "ML Trading International"
