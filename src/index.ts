@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, count, sum, gte, ne } from "drizzle-orm";
 import { getDb, schema } from "./db";
 import {
   verifyPassword,
@@ -934,6 +934,84 @@ app.post(
       reseller,
       login: { id: user.id, email: user.email },
       setupLink, // TODO(email): send via Resend instead of returning
+    });
+  }
+);
+
+/* ============================================================
+ * DASHBOARD  (staff KPIs — all derived from live data)
+ * ========================================================== */
+
+app.get(
+  "/api/app/dashboard",
+  requireRole("owner", "finance_manager", "finance_team", "shipping_manager", "shipping_team"),
+  async (c) => {
+    const db = getDb(c.env.DATABASE_URL);
+    const now = new Date();
+    const startToday = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+    );
+    const startWeek = new Date(startToday);
+    startWeek.setUTCDate(startToday.getUTCDate() - ((startToday.getUTCDay() + 6) % 7));
+
+    const [payRows, fulRows, totalRow, todayRow, weekRow, recent, topRes] =
+      await Promise.all([
+        db
+          .select({
+            status: schema.orders.paymentStatus,
+            n: count(),
+            total: sum(schema.orders.orderTotal),
+          })
+          .from(schema.orders)
+          .groupBy(schema.orders.paymentStatus),
+        db
+          .select({ status: schema.orders.fulfilmentStatus, n: count() })
+          .from(schema.orders)
+          .groupBy(schema.orders.fulfilmentStatus),
+        db
+          .select({
+            gross: sum(schema.orders.orderTotal),
+            verified: sum(schema.orders.amountVerified),
+            n: count(),
+          })
+          .from(schema.orders)
+          .where(ne(schema.orders.fulfilmentStatus, "cancelled")),
+        db.select({ n: count() }).from(schema.orders).where(gte(schema.orders.createdAt, startToday)),
+        db.select({ n: count() }).from(schema.orders).where(gte(schema.orders.createdAt, startWeek)),
+        db.select().from(schema.orders).orderBy(desc(schema.orders.createdAt)).limit(8),
+        db
+          .select({
+            name: schema.resellers.name,
+            orders: count(schema.orders.id),
+            value: sum(schema.orders.orderTotal),
+          })
+          .from(schema.resellers)
+          .leftJoin(schema.orders, eq(schema.orders.resellerId, schema.resellers.id))
+          .groupBy(schema.resellers.id, schema.resellers.name),
+      ]);
+
+    const t = totalRow[0] || { gross: "0", verified: "0", n: 0 };
+    const gross = Number(t.gross || 0);
+    const verified = Number(t.verified || 0);
+    const pay = payRows.map((r) => ({ status: r.status, n: Number(r.n), total: Number(r.total || 0) }));
+    const ful = fulRows.map((r) => ({ status: r.status, n: Number(r.n) }));
+    const sumBy = (arr: any[], keys: string[]) =>
+      arr.filter((x) => keys.includes(x.status)).reduce((a, x) => a + x.n, 0);
+
+    return c.json({
+      totals: { gross, verified, outstanding: gross - verified, orders: Number(t.n || 0) },
+      today: Number(todayRow[0]?.n || 0),
+      week: Number(weekRow[0]?.n || 0),
+      needsReview: sumBy(pay, ["review_pending", "cash_pending"]),
+      shipQueue: sumBy(ful, ["ready_to_pack", "packed"]),
+      onHold: sumBy(ful, ["issue_hold"]),
+      pay,
+      ful,
+      recent,
+      top: topRes
+        .map((r) => ({ name: r.name, orders: Number(r.orders || 0), value: Number(r.value || 0) }))
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 5),
     });
   }
 );

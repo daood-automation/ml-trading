@@ -159,6 +159,16 @@
     .shell{grid-template-columns:1fr}.side{display:none}.main{padding:18px}
     .row2{grid-template-columns:1fr}
   }
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px}
+  .kpi{background:var(--card);border:1px solid var(--border-subtle);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);padding:18px 20px}
+  .kpi .l{font-size:13px;color:var(--text-2);font-weight:500;display:flex;align-items:center;gap:7px}
+  .kpi .l svg{width:15px;height:15px;color:var(--text-3)}
+  .kpi .v{font-size:26px;font-weight:600;letter-spacing:-.02em;margin-top:7px;font-variant-numeric:tabular-nums}
+  .kpi .s{font-size:12px;color:var(--text-3);margin-top:3px}
+  .attn{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border-subtle)}
+  .attn:last-child{border-bottom:none}
+  .brk{display:flex;align-items:center;justify-content:space-between;padding:9px 0}
+  @media(max-width:900px){.kpis{grid-template-columns:repeat(2,1fr)}}
 </style>
 </head>
 <body>
@@ -258,7 +268,7 @@ async function boot(){
   const params=new URLSearchParams(location.search);
   const setup=params.get("setup");
   if(setup){ return renderSetup(setup); }
-  try{ const me=await api("/api/app/me"); STATE.user=me.user; renderApp("orders"); }
+  try{ const me=await api("/api/app/me"); STATE.user=me.user; renderApp(defaultView()); }
   catch(e){ renderLogin(); }
 }
 
@@ -275,7 +285,7 @@ function renderLogin(){
   const go=async()=>{
     $("err").textContent="";
     try{ const r=await api("/api/auth/login",{method:"POST",body:JSON.stringify({email:$("email").value.trim(),password:$("pw").value})});
-      STATE.user=r.user; renderApp("orders"); }
+      STATE.user=r.user; renderApp(defaultView()); }
     catch(e){ $("err").textContent=loginErr(e.message); }
   };
   $("go").onclick=go;
@@ -305,13 +315,16 @@ function renderSetup(token){
 
 /* ---------- app shell ---------- */
 function navItems(){
-  const items=[{k:"orders",label:"Orders"}];
+  const items=[];
+  if(isStaff()) items.push({k:"dashboard",label:"Dashboard"});
+  items.push({k:"orders",label:"Orders"});
   if(STATE.user.role==="reseller") items.push({k:"new",label:"New order"});
   if(isShipping()) items.push({k:"queue",label:"Shipping queue"});
   if(canManage()) items.push({k:"products",label:"Products"});
   if(["owner","finance_manager"].includes(STATE.user.role)) items.push({k:"resellers",label:"Resellers"});
   return items;
 }
+function defaultView(){ return isStaff()?"dashboard":"orders"; }
 function renderApp(view){
   const u=STATE.user;
   app.innerHTML=`<div class="shell">
@@ -326,11 +339,66 @@ function renderApp(view){
   $("nav").querySelectorAll("button").forEach(b=>b.onclick=()=>renderApp(b.dataset.k));
   $("logout").onclick=async()=>{ await api("/api/auth/logout",{method:"POST"}); STATE.user=null; renderLogin(); };
   const M=$("main");
-  if(view==="orders") viewOrders(M);
+  if(view==="dashboard") viewDashboard(M);
+  else if(view==="orders") viewOrders(M);
   else if(view==="new") viewNewOrder(M);
   else if(view==="queue") viewQueue(M);
   else if(view==="products") viewProducts(M);
   else if(view==="resellers") viewResellers(M);
+}
+
+/* ---------- dashboard ---------- */
+const I={
+  money:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 6.5c0-1.9-2.2-3-5-3s-5 1.1-5 3 2.2 3 5 3 5 1.1 5 3-2.2 3-5 3-5-1.1-5-3"/></svg>',
+  check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>',
+  scale:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M5 7h14M7 7l-3 6h6zM17 7l-3 6h6z"/></svg>',
+  box:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 3 7v10l9 5 9-5V7z"/><path d="M3 7l9 5 9-5"/></svg>'
+};
+async function viewDashboard(M){
+  M.innerHTML=`<div class="head"><div><div class="eyebrow">Overview</div><h1>Dashboard</h1></div></div><div id="dash">Loading…</div>`;
+  let d;
+  try{ d=await api("/api/app/dashboard"); }catch(e){ $("dash").innerHTML=`<div class="empty">Could not load dashboard.</div>`; return; }
+  const kpi=(icon,label,val,sub)=>`<div class="kpi"><div class="l">${icon}${label}</div><div class="v">${val}</div>${sub?`<div class="s">${sub}</div>`:""}</div>`;
+  $("dash").innerHTML=`
+    <div class="kpis">
+      ${kpi(I.money,"Revenue",money(d.totals.gross),`${d.totals.orders} orders`)}
+      ${kpi(I.check,"Verified",money(d.totals.verified))}
+      ${kpi(I.scale,"Outstanding",money(d.totals.outstanding))}
+      ${kpi(I.box,"New orders",d.week,`${d.today} today · ${d.week} this week`)}
+    </div>
+    <div class="grid" style="grid-template-columns:1fr 1fr;align-items:start">
+      <div class="card"><h3 style="margin-bottom:6px">Needs attention</h3>
+        <div class="attn"><span class="muted">Payments to review</span>
+          <button class="btn ghost sm" data-goto="review">${d.needsReview} pending</button></div>
+        <div class="attn"><span class="muted">In shipping queue</span>
+          <button class="btn ghost sm" data-goto="queue">${d.shipQueue} orders</button></div>
+        <div class="attn"><span class="muted">On hold (issues)</span>
+          <span class="pill ${d.onHold?"s-red":"s-grey"}">${d.onHold}</span></div>
+      </div>
+      <div class="card"><h3 style="margin-bottom:10px">Payment status</h3>
+        ${d.pay.length?d.pay.map(p=>`<div class="brk">${pill(PAY_LABEL,PAY_COLOR,p.status)}
+          <span class="muted mono">${p.n} · ${money(p.total)}</span></div>`).join(""):'<div class="faint">No orders yet.</div>'}
+      </div>
+      <div class="card"><h3 style="margin-bottom:10px">Top resellers</h3>
+        ${d.top.filter(r=>r.orders>0).length?`<table><tbody>${d.top.filter(r=>r.orders>0).map(r=>`<tr>
+          <td>${esc(r.name)}</td><td class="faint">${r.orders} orders</td><td class="mono" style="text-align:right">${money(r.value)}</td></tr>`).join("")}</tbody></table>`:'<div class="faint">No reseller orders yet.</div>'}
+      </div>
+      <div class="card"><h3 style="margin-bottom:10px">Fulfilment</h3>
+        ${d.ful.length?d.ful.map(f=>`<div class="brk">${pill(FUL_LABEL,FUL_COLOR,f.status)}
+          <span class="muted mono">${f.n}</span></div>`).join(""):'<div class="faint">No orders yet.</div>'}
+      </div>
+    </div>
+    <div class="card" style="margin-top:20px"><h3 style="margin-bottom:10px">Recent orders</h3>
+      ${d.recent.length?`<table><thead><tr><th>Order</th><th>Customer</th><th>Total</th><th>Payment</th><th>Fulfilment</th></tr></thead>
+        <tbody>${d.recent.map(o=>`<tr class="row" data-id="${o.id}"><td class="mono">${esc(o.orderNo)}</td><td>${esc(o.customerName)}</td>
+          <td class="mono">${money(o.orderTotal)}</td><td>${pill(PAY_LABEL,PAY_COLOR,o.paymentStatus)}</td>
+          <td>${pill(FUL_LABEL,FUL_COLOR,o.fulfilmentStatus)}</td></tr>`).join("")}</tbody></table>`:'<div class="empty">No orders yet.</div>'}
+    </div>`;
+  $("dash").querySelectorAll("tr.row").forEach(r=>r.onclick=()=>openOrder(r.dataset.id));
+  $("dash").querySelectorAll("[data-goto]").forEach(b=>b.onclick=()=>{
+    if(b.dataset.goto==="queue") renderApp("queue");
+    else { renderApp("orders"); }
+  });
 }
 
 /* ---------- orders list ---------- */
