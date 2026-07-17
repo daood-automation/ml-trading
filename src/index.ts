@@ -39,8 +39,11 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 /* ---------- helpers ---------- */
 
-function isSecure(url: string) {
-  return url.startsWith("https://");
+function reqOrigin(c: any): string {
+  return new URL(c.req.url).origin;
+}
+function reqIsSecure(c: any): boolean {
+  return new URL(c.req.url).protocol === "https:";
 }
 
 /* ============================================================
@@ -107,7 +110,7 @@ app.post("/api/auth/login", async (c) => {
 
   setCookie(c, SESSION_COOKIE, raw, {
     httpOnly: true,
-    secure: isSecure(c.env.APP_BASE_URL),
+    secure: reqIsSecure(c),
     sameSite: "Lax",
     path: "/",
     maxAge: 7 * 24 * 60 * 60,
@@ -352,7 +355,7 @@ app.post(
       expiresAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
     });
 
-    const setupLink = `${c.env.APP_BASE_URL}/?setup=${raw}`;
+    const setupLink = `${reqOrigin(c)}/?setup=${raw}`;
     return c.json({
       ok: true,
       user: { id: u.id, email: u.email, role: u.role },
@@ -925,7 +928,7 @@ app.post(
       notes: reseller.id,
     });
 
-    const setupLink = `${c.env.APP_BASE_URL}/?setup=${raw}`;
+    const setupLink = `${reqOrigin(c)}/?setup=${raw}`;
     return c.json({
       ok: true,
       reseller,
