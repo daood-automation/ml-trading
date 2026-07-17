@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { getDb, schema } from "./db";
 import {
   verifyPassword,
@@ -360,6 +360,190 @@ app.post(
     });
   }
 );
+
+/* ============================================================
+ * ORDERS
+ * ========================================================== */
+
+// Submit an order. Reseller submits for their own account; staff may
+// submit on behalf of a reseller by passing resellerId.
+// Totals are computed server-side from catalog prices — never trusted
+// from the client. Order + items + fulfilment are written atomically
+// via db.batch (a single server-side transaction), which replaces the
+// old LockService lock.
+app.post("/api/app/orders", async (c) => {
+  const db = getDb(c.env.DATABASE_URL);
+  const actor = c.get("user");
+  const body = await c.req.json<{
+    resellerId?: string;
+    clientRequestId?: string;
+    deliveryType?: (typeof schema.orders.$inferSelect)["deliveryType"];
+    customerName?: string;
+    customerPhone?: string;
+    customerEmail?: string;
+    deliveryAddress?: string;
+    notes?: string;
+    items?: { productCode: string; qty: number }[];
+  }>();
+
+  // resolve which reseller this order belongs to
+  let resellerId: string | null = null;
+  if (actor.role === "reseller") {
+    resellerId = actor.resellerId;
+    if (!resellerId) return c.json({ error: "reseller_not_linked" }, 400);
+  } else if (["owner", "finance_manager", "shipping_manager"].includes(actor.role)) {
+    resellerId = body.resellerId ?? null;
+    if (!resellerId) return c.json({ error: "reseller_id_required" }, 400);
+  } else {
+    return c.json({ error: "forbidden" }, 403);
+  }
+
+  const items = body.items ?? [];
+  if (items.length === 0) return c.json({ error: "no_items" }, 400);
+  if (!body.deliveryType) return c.json({ error: "delivery_type_required" }, 400);
+  if (!body.customerName || !body.customerPhone || !body.deliveryAddress) {
+    return c.json({ error: "customer_details_required" }, 400);
+  }
+
+  // idempotency — replaces the old ClientRequestID dedupe
+  if (body.clientRequestId) {
+    const [dupe] = await db
+      .select()
+      .from(schema.orders)
+      .where(
+        and(
+          eq(schema.orders.resellerId, resellerId),
+          eq(schema.orders.clientRequestId, body.clientRequestId)
+        )
+      )
+      .limit(1);
+    if (dupe) return c.json({ ok: true, order: dupe, deduped: true });
+  }
+
+  // price everything from the catalog; reject unknown/unpriced/unavailable
+  const itemRows: (typeof schema.orderItems.$inferInsert)[] = [];
+  let orderTotal = 0;
+  const orderId = crypto.randomUUID();
+  let line = 1;
+  for (const it of items) {
+    const qty = Number(it.qty);
+    if (!it.productCode || !Number.isInteger(qty) || qty <= 0) {
+      return c.json({ error: "invalid_item", productCode: it.productCode }, 400);
+    }
+    const [p] = await db
+      .select()
+      .from(schema.products)
+      .where(eq(schema.products.code, it.productCode))
+      .limit(1);
+    if (!p) return c.json({ error: "unknown_product", productCode: it.productCode }, 400);
+    if (p.status !== "available")
+      return c.json({ error: "product_unavailable", productCode: it.productCode }, 400);
+    if (p.price == null)
+      return c.json({ error: "product_has_no_price", productCode: it.productCode }, 400);
+
+    const unit = Number(p.price);
+    const lineTotal = unit * qty;
+    orderTotal += lineTotal;
+    itemRows.push({
+      orderId,
+      lineNo: line++,
+      productCode: p.code,
+      productName: p.name,
+      category: p.category,
+      qty,
+      unitPrice: unit.toFixed(2),
+      lineTotal: lineTotal.toFixed(2),
+    });
+  }
+
+  const results = await db.batch([
+    db
+      .insert(schema.orders)
+      .values({
+        id: orderId,
+        resellerId,
+        clientRequestId: body.clientRequestId ?? null,
+        deliveryType: body.deliveryType,
+        customerName: body.customerName,
+        customerPhone: body.customerPhone,
+        customerEmail: body.customerEmail ?? null,
+        deliveryAddress: body.deliveryAddress,
+        orderTotal: orderTotal.toFixed(2),
+        notes: body.notes ?? null,
+      })
+      .returning(),
+    db.insert(schema.orderItems).values(itemRows),
+    db.insert(schema.fulfilment).values({ orderId, status: "not_released" }),
+    db.insert(schema.auditLog).values({
+      userId: actor.id,
+      userEmail: actor.email,
+      userRole: actor.role,
+      action: "order_created",
+      orderId,
+    }),
+  ]);
+
+  const order = (results[0] as (typeof schema.orders.$inferSelect)[])[0];
+  return c.json({ ok: true, order });
+});
+
+// List orders. Resellers see only their own; staff see all, with optional
+// payment/fulfilment filters and simple pagination.
+app.get("/api/app/orders", async (c) => {
+  const db = getDb(c.env.DATABASE_URL);
+  const actor = c.get("user");
+  const limit = Math.min(Number(c.req.query("limit") ?? "50"), 200);
+  const offset = Number(c.req.query("offset") ?? "0");
+
+  const filters = [];
+  if (actor.role === "reseller") {
+    if (!actor.resellerId) return c.json({ orders: [] });
+    filters.push(eq(schema.orders.resellerId, actor.resellerId));
+  }
+  const ps = c.req.query("paymentStatus");
+  const fs = c.req.query("fulfilmentStatus");
+  if (ps) filters.push(eq(schema.orders.paymentStatus, ps as any));
+  if (fs) filters.push(eq(schema.orders.fulfilmentStatus, fs as any));
+
+  const rows = await db
+    .select()
+    .from(schema.orders)
+    .where(filters.length ? and(...filters) : undefined)
+    .orderBy(desc(schema.orders.createdAt))
+    .limit(limit)
+    .offset(offset);
+
+  return c.json({ orders: rows });
+});
+
+// Order detail with items, payments, fulfilment. Resellers restricted to own.
+app.get("/api/app/orders/:id", async (c) => {
+  const db = getDb(c.env.DATABASE_URL);
+  const actor = c.get("user");
+  const id = c.req.param("id");
+
+  const [order] = await db
+    .select()
+    .from(schema.orders)
+    .where(eq(schema.orders.id, id))
+    .limit(1);
+  if (!order) return c.json({ error: "not_found" }, 404);
+  if (actor.role === "reseller" && order.resellerId !== actor.resellerId) {
+    return c.json({ error: "forbidden" }, 403);
+  }
+
+  const [items, pays, [ful]] = await Promise.all([
+    db.select().from(schema.orderItems).where(eq(schema.orderItems.orderId, id)),
+    db.select().from(schema.payments).where(eq(schema.payments.orderId, id)),
+    db.select().from(schema.fulfilment).where(eq(schema.fulfilment.orderId, id)).limit(1),
+  ]);
+
+  const balanceDue = (
+    Number(order.orderTotal) - Number(order.amountVerified)
+  ).toFixed(2);
+
+  return c.json({ order: { ...order, balanceDue }, items, payments: pays, fulfilment: ful ?? null });
+});
 
 /* ---------- health ---------- */
 

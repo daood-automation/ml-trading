@@ -1,6 +1,7 @@
 import {
   pgTable,
   pgEnum,
+  pgSequence,
   uuid,
   text,
   varchar,
@@ -11,7 +12,15 @@ import {
   index,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
+
+// Atomic, gapless source for human order numbers (ORD-00001).
+// A DB sequence is race-free without needing an interactive transaction,
+// which the Neon HTTP driver doesn't support anyway.
+export const orderNoSeq = pgSequence("order_no_seq", {
+  startWith: 1,
+  increment: 1,
+});
 
 /* ============================================================
  * ENUMS
@@ -216,6 +225,10 @@ export const products = pgTable(
     code: varchar("code", { length: 64 }).notNull(),
     name: varchar("name", { length: 255 }).notNull(),
     category: varchar("category", { length: 128 }),
+    // Catalog price. Orders always use THIS, never a client-supplied price.
+    // Nullable so a product can exist before pricing is set; orders reject
+    // any product whose price is still null.
+    price: numeric("price", { precision: 12, scale: 2 }),
     status: productStatus("status").notNull().default("available"),
     qboItemName: varchar("qbo_item_name", { length: 255 }),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -238,8 +251,10 @@ export const orders = pgTable(
   "orders",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    // human-facing sequential id (ORD-0001). Generated in a txn.
-    orderNo: varchar("order_no", { length: 32 }).notNull(),
+    // human-facing sequential id (ORD-00001), assigned atomically by the DB.
+    orderNo: varchar("order_no", { length: 32 })
+      .notNull()
+      .default(sql`'ORD-' || lpad(nextval('order_no_seq')::text, 5, '0')`),
 
     // idempotency: replaces the ClientRequestID dedupe in submitResellerOrder
     clientRequestId: varchar("client_request_id", { length: 128 }),
