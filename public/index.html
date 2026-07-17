@@ -269,7 +269,33 @@ async function boot(){
   const setup=params.get("setup");
   if(setup){ return renderSetup(setup); }
   try{ const me=await api("/api/app/me"); STATE.user=me.user; renderApp(defaultView()); }
-  catch(e){ renderLogin(); }
+  catch(e){
+    try{ const s=await api("/api/bootstrap-status"); if(!s.ownerExists) return renderOwnerSetup(); }catch(_){}
+    renderLogin();
+  }
+}
+
+/* ---------- first-run owner setup ---------- */
+function renderOwnerSetup(){
+  app.innerHTML=authShell(`
+      <div class="eyebrow">First-time setup</div>
+      <h2 style="margin-bottom:5px">Create the owner account</h2>
+      <p class="muted" style="margin:0 0 22px">This is the top-level admin for ML Trading. You can add the rest of your team once you're in.</p>
+      <div class="field"><label>Your name</label><input id="name"/></div>
+      <div class="field"><label>Email</label><input id="email" type="email" placeholder="you@company.com"/></div>
+      <div class="field"><label>Password (min 8 characters)</label><input id="pw" type="password" placeholder="••••••••"/></div>
+      <button class="btn accent" style="width:100%" id="go">Create account</button>
+      <div class="err" id="err"></div>`);
+  const go=async()=>{
+    $("err").textContent="";
+    if(!$("email").value.trim()||!$("name").value.trim()){ $("err").textContent="Name and email are required."; return; }
+    if($("pw").value.length<8){ $("err").textContent="Password must be at least 8 characters."; return; }
+    try{ await api("/api/bootstrap-owner",{method:"POST",body:JSON.stringify({name:$("name").value.trim(),email:$("email").value.trim(),password:$("pw").value})});
+      toast("Owner account created — sign in now."); renderLogin();
+    }catch(e){ $("err").textContent=e.message==="owner_already_exists"?"An owner already exists — please sign in.":"Could not create account."; }
+  };
+  $("go").onclick=go;
+  $("pw").addEventListener("keydown",e=>{if(e.key==="Enter")go();});
 }
 
 /* ---------- login ---------- */
@@ -360,13 +386,13 @@ async function viewDashboard(M){
   M.innerHTML=`<div class="head"><div><div class="eyebrow">Overview</div><h1>Dashboard</h1></div></div><div id="dash">Loading…</div>`;
   let d;
   try{ d=await api("/api/app/dashboard"); }catch(e){ $("dash").innerHTML=`<div class="empty">Could not load dashboard.</div>`; return; }
-  const kpi=(icon,label,val,sub)=>`<div class="kpi"><div class="l">${icon}${label}</div><div class="v">${val}</div>${sub?`<div class="s">${sub}</div>`:""}</div>`;
+  const kpi=(icon,label,val,sub,nav,filt)=>`<div class="kpi" ${nav?`data-nav="${nav}" ${filt?`data-filter="${filt}"`:""} style="cursor:pointer"`:""}><div class="l">${icon}${label}</div><div class="v">${val}</div>${sub?`<div class="s">${sub}</div>`:""}</div>`;
   $("dash").innerHTML=`
     <div class="kpis">
-      ${kpi(I.money,"Revenue",money(d.totals.gross),`${d.totals.orders} orders`)}
-      ${kpi(I.check,"Verified",money(d.totals.verified))}
-      ${kpi(I.scale,"Outstanding",money(d.totals.outstanding))}
-      ${kpi(I.box,"New orders",d.week,`${d.today} today · ${d.week} this week`)}
+      ${kpi(I.money,"Revenue",money(d.totals.gross),`${d.totals.orders} orders`,"orders")}
+      ${kpi(I.check,"Verified",money(d.totals.verified),null,"orders","full_verified")}
+      ${kpi(I.scale,"Outstanding",money(d.totals.outstanding),null,"orders","partial_verified")}
+      ${kpi(I.box,"New orders",d.week,`${d.today} today · ${d.week} this week`,"orders")}
     </div>
     <div class="grid" style="grid-template-columns:1fr 1fr;align-items:start">
       <div class="card"><h3 style="margin-bottom:6px">Needs attention</h3>
@@ -397,9 +423,13 @@ async function viewDashboard(M){
           <td>${pill(FUL_LABEL,FUL_COLOR,o.fulfilmentStatus)}</td></tr>`).join("")}</tbody></table>`:'<div class="empty">No orders yet.</div>'}
     </div>`;
   $("dash").querySelectorAll("tr.row").forEach(r=>r.onclick=()=>openOrder(r.dataset.id));
+  $("dash").querySelectorAll("[data-nav]").forEach(el=>el.onclick=()=>{
+    if(el.dataset.filter) STATE.ordersFilter={paymentStatus:el.dataset.filter};
+    renderApp(el.dataset.nav);
+  });
   $("dash").querySelectorAll("[data-goto]").forEach(b=>b.onclick=()=>{
-    if(b.dataset.goto==="queue") renderApp("queue");
-    else { renderApp("orders"); }
+    if(b.dataset.goto==="queue"){ renderApp("queue"); }
+    else { STATE.ordersFilter={paymentStatus:"review_pending"}; renderApp("orders"); }
   });
 }
 
@@ -414,6 +444,11 @@ async function viewOrders(M){
       <select id="fpay"><option value="">All payment states</option>${Object.keys(PAY_LABEL).map(k=>`<option value="${k}">${PAY_LABEL[k]}</option>`).join("")}</select>
       <select id="fful"><option value="">All fulfilment states</option>${Object.keys(FUL_LABEL).map(k=>`<option value="${k}">${FUL_LABEL[k]}</option>`).join("")}</select></div>`;
     $("fpay").onchange=load; $("fful").onchange=load;
+    if(STATE.ordersFilter){
+      if(STATE.ordersFilter.paymentStatus) $("fpay").value=STATE.ordersFilter.paymentStatus;
+      if(STATE.ordersFilter.fulfilmentStatus) $("fful").value=STATE.ordersFilter.fulfilmentStatus;
+      STATE.ordersFilter=null;
+    }
   }
   async function load(){
     const qs=new URLSearchParams();

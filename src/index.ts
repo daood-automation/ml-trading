@@ -211,18 +211,25 @@ export function requireRole(
  * own login, then this route is inert.
  * ========================================================== */
 
+// Public: is first-run setup still needed? Drives the browser onboarding.
+app.get("/api/bootstrap-status", async (c) => {
+  const db = getDb(c.env.DATABASE_URL);
+  const [existingOwner] = await db
+    .select({ id: schema.users.id })
+    .from(schema.users)
+    .where(eq(schema.users.role, "owner"))
+    .limit(1);
+  return c.json({ ownerExists: !!existingOwner });
+});
+
 app.post("/api/bootstrap-owner", async (c) => {
   const db = getDb(c.env.DATABASE_URL);
   const body = await c.req.json<{
-    key?: string;
     email?: string;
     password?: string;
     name?: string;
   }>();
 
-  if (!body.key || body.key !== c.env.SESSION_SECRET) {
-    return c.json({ error: "forbidden" }, 403);
-  }
   const email = (body.email ?? "").trim().toLowerCase();
   const password = body.password ?? "";
   const name = (body.name ?? "Owner").trim();
@@ -230,6 +237,9 @@ app.post("/api/bootstrap-owner", async (c) => {
     return c.json({ error: "email_and_8char_password_required" }, 400);
   }
 
+  // The zero-owner state IS the security gate: this succeeds only while no
+  // owner exists, so the first person to set up a fresh deployment becomes
+  // owner. Once an owner exists it is permanently inert (409).
   const [existingOwner] = await db
     .select()
     .from(schema.users)
