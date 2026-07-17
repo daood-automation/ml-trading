@@ -200,6 +200,167 @@ export function requireRole(
   };
 }
 
+/* ============================================================
+ * OWNER BOOTSTRAP
+ * One-time creation of the first owner login. Gated by SESSION_SECRET
+ * AND only works while no owner exists yet, so it can't be used to add
+ * rogue admins later. No email needed — you call it once to create your
+ * own login, then this route is inert.
+ * ========================================================== */
+
+app.post("/api/bootstrap-owner", async (c) => {
+  const db = getDb(c.env.DATABASE_URL);
+  const body = await c.req.json<{
+    key?: string;
+    email?: string;
+    password?: string;
+    name?: string;
+  }>();
+
+  if (!body.key || body.key !== c.env.SESSION_SECRET) {
+    return c.json({ error: "forbidden" }, 403);
+  }
+  const email = (body.email ?? "").trim().toLowerCase();
+  const password = body.password ?? "";
+  const name = (body.name ?? "Owner").trim();
+  if (!email || password.length < 8) {
+    return c.json({ error: "email_and_8char_password_required" }, 400);
+  }
+
+  const [existingOwner] = await db
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.role, "owner"))
+    .limit(1);
+  if (existingOwner) return c.json({ error: "owner_already_exists" }, 409);
+
+  const passwordHash = await hashPassword(password);
+  const [u] = await db
+    .insert(schema.users)
+    .values({
+      email,
+      name,
+      role: "owner",
+      status: "active",
+      passwordHash,
+      forcePasswordSetup: false,
+    })
+    .returning();
+
+  return c.json({ ok: true, user: { id: u.id, email: u.email, role: u.role } });
+});
+
+/* ============================================================
+ * SET / RESET PASSWORD  (token-based, token stored hashed)
+ * ========================================================== */
+
+app.post("/api/auth/set-password", async (c) => {
+  const db = getDb(c.env.DATABASE_URL);
+  const body = await c.req.json<{ token?: string; password?: string }>();
+  const token = body.token ?? "";
+  const password = body.password ?? "";
+  if (!token || password.length < 8) {
+    return c.json({ error: "token_and_8char_password_required" }, 400);
+  }
+
+  const tokenHash = await hashToken(token);
+  const [row] = await db
+    .select()
+    .from(schema.passwordTokens)
+    .where(eq(schema.passwordTokens.tokenHash, tokenHash))
+    .limit(1);
+
+  if (!row || row.usedAt || row.expiresAt < new Date()) {
+    return c.json({ error: "invalid_or_expired_token" }, 400);
+  }
+
+  const passwordHash = await hashPassword(password);
+  await db
+    .update(schema.users)
+    .set({
+      passwordHash,
+      forcePasswordSetup: false,
+      failedAttempts: 0,
+      lockedUntil: null,
+    })
+    .where(eq(schema.users.id, row.userId));
+  await db
+    .update(schema.passwordTokens)
+    .set({ usedAt: new Date() })
+    .where(eq(schema.passwordTokens.id, row.id));
+
+  return c.json({ ok: true });
+});
+
+/* ============================================================
+ * CREATE USER  (owner / managers add staff or resellers)
+ * Creates the login + a hashed setup token. Until Resend is wired,
+ * the setup link is returned in the response so you can hand it over;
+ * TODO(email): send this link via Resend instead of returning it.
+ * ========================================================== */
+
+app.post(
+  "/api/app/users",
+  requireRole("owner", "finance_manager", "shipping_manager"),
+  async (c) => {
+    const db = getDb(c.env.DATABASE_URL);
+    const body = await c.req.json<{
+      email?: string;
+      name?: string;
+      role?: (typeof schema.users.$inferSelect)["role"];
+      resellerId?: string | null;
+    }>();
+
+    const email = (body.email ?? "").trim().toLowerCase();
+    const name = (body.name ?? "").trim();
+    const role = body.role;
+    if (!email || !name || !role) {
+      return c.json({ error: "email_name_role_required" }, 400);
+    }
+    // only an owner may mint another owner
+    const actor = c.get("user");
+    if (role === "owner" && actor.role !== "owner") {
+      return c.json({ error: "only_owner_can_create_owner" }, 403);
+    }
+
+    const [existing] = await db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.email, email))
+      .limit(1);
+    if (existing) return c.json({ error: "email_already_exists" }, 409);
+
+    const [u] = await db
+      .insert(schema.users)
+      .values({
+        email,
+        name,
+        role,
+        status: "active",
+        forcePasswordSetup: true,
+        resellerId: body.resellerId ?? null,
+      })
+      .returning();
+
+    // setup token (raw returned once, only hash stored)
+    const raw = generateToken();
+    const tokenHash = await hashToken(raw);
+    await db.insert(schema.passwordTokens).values({
+      userId: u.id,
+      tokenHash,
+      purpose: "set",
+      expiresAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+    });
+
+    const setupLink = `${c.env.APP_BASE_URL}/set-password?token=${raw}`;
+    return c.json({
+      ok: true,
+      user: { id: u.id, email: u.email, role: u.role },
+      setupLink, // TODO(email): send via Resend, stop returning this
+    });
+  }
+);
+
 /* ---------- health ---------- */
 
 app.get("/api/health", async (c) => {
